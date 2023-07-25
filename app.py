@@ -7,6 +7,7 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from azure.core.exceptions import ResourceNotFoundError
 from requests.exceptions import HTTPError
+import logging
 
 class TwitterAPI:
     def __init__(self, bearer_token, account_url):
@@ -86,7 +87,7 @@ class TwitterAPI:
             self.upload_blob_text(container_name, output_blob_name, json.dumps(all_tweets, indent=4, sort_keys=True))
             logging.info(f"Data saved to blob: {output_blob_name}")
 
-if __name__ == "__main__":
+def run_app():
     logging.info("Initializing DefaultAzureCredential")
     credential = DefaultAzureCredential()
 
@@ -102,3 +103,6 @@ if __name__ == "__main__":
     
     logging.info("Running TwitterAPI")
     twitter_api.main('scrapingstoragecontainer', 'tweetids.txt', 'Tweets.json', 'last_tweet_id.txt', 'failed_tweet_ids.txt')
+
+if __name__ == "__main__":
+    run_app()
