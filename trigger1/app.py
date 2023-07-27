@@ -54,38 +54,43 @@ class TwitterAPI:
         return ids_text.strip().split('\n')
 
     def main(self, container_name, tweet_ids_blob_name, output_blob_name, last_tweet_id_blob_name, failed_tweet_ids_blob_name):
-        logging.info("Fetching tweet IDs")
-        tweet_ids = self.get_tweet_ids_from_file(container_name, tweet_ids_blob_name)
+    logging.info("Fetching tweet IDs")
+    tweet_ids = self.get_tweet_ids_from_file(container_name, tweet_ids_blob_name)
 
         try:
-            last_tweet_id = self.get_blob_text(container_name, last_tweet_id_blob_name).strip()
-            tweet_ids = tweet_ids[tweet_ids.index(last_tweet_id) + 1:]
+        last_tweet_id = self.get_blob_text(container_name, last_tweet_id_blob_name).strip()
+        tweet_ids = tweet_ids[tweet_ids.index(last_tweet_id) + 1:]
         except Exception as e:
-            logging.error("Error reading last_tweet_id_blob", exc_info=True)
+        logging.error("Error reading last_tweet_id_blob", exc_info=True)
 
         try:
-            failed_tweet_ids = set(self.get_blob_text(container_name, failed_tweet_ids_blob_name).strip().split('\n'))
-            tweet_ids = [id for id in tweet_ids if id not in failed_tweet_ids]
+        failed_tweet_ids = set(self.get_blob_text(container_name, failed_tweet_ids_blob_name).strip().split('\n'))
+        tweet_ids = [id for id in tweet_ids if id not in failed_tweet_ids]
         except Exception as e:
-            logging.error("Error reading failed_tweet_ids_blob", exc_info=True)
-            failed_tweet_ids = set()
+        logging.error("Error reading failed_tweet_ids_blob", exc_info=True)
+        failed_tweet_ids = set()
+    
+        try:
+            all_tweets = json.loads(self.get_blob_text(container_name, output_blob_name))
+        except Exception as e:
+        logging.error("Error reading output_blob", exc_info=True)
+        all_tweets = []
 
         chunks = [tweet_ids[i:i + 100] for i in range(0, len(tweet_ids), 100)]
-        all_tweets = []
         for chunk in chunks:
-            url = self.create_url(chunk)
-            json_response = self.connect_to_endpoint(url)
-            if json_response is not None:
-                all_tweets.extend(json_response.get('data', []))
-                self.upload_blob_text(container_name, last_tweet_id_blob_name, chunk[-1])
-            else:
-                failed_tweet_ids.update(chunk)
-                self.upload_blob_text(container_name, failed_tweet_ids_blob_name, '\n'.join(failed_tweet_ids))
-                logging.info("Rate limit reached. Waiting 15 minutes before retrying...")
-                time.sleep(15 * 60)
+        url = self.create_url(chunk)
+        json_response = self.connect_to_endpoint(url)
+        if json_response is not None:
+            all_tweets.extend(json_response.get('data', []))
+            self.upload_blob_text(container_name, last_tweet_id_blob_name, chunk[-1])
+        else:
+            failed_tweet_ids.update(chunk)
+            self.upload_blob_text(container_name, failed_tweet_ids_blob_name, '\n'.join(failed_tweet_ids))
+            logging.info("Rate limit reached. Waiting 15 minutes before retrying...")
+            time.sleep(15 * 60)
 
-            self.upload_blob_text(container_name, output_blob_name, json.dumps(all_tweets, indent=4, sort_keys=True))
-            logging.info(f"Data saved to blob: {output_blob_name}")
+        self.upload_blob_text(container_name, output_blob_name, json.dumps(all_tweets, indent=4, sort_keys=True))
+        logging.info(f"Data saved to blob: {output_blob_name}")
 
 def run_app():
     logging.info("Initializing DefaultAzureCredential")
