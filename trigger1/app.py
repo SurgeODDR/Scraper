@@ -75,18 +75,20 @@ class TwitterAPI:
         else:
             failed_tweet_ids = set()
 
-        all_tweets_text = self.get_blob_text(container_name, output_blob_name)
-        if all_tweets_text != "":
-            all_tweets = json.loads(all_tweets_text)
-        else:
-            all_tweets = []
-
+        tweets_text = self.get_blob_text(container_name, output_blob_name)
+        if tweets_text == "":
+            self.upload_blob_text(container_name, output_blob_name, "[]")
+        
         chunks = [tweet_ids[i:i + 100] for i in range(0, len(tweet_ids), 100)]
         for chunk in chunks:
             url = self.create_url(chunk)
             json_response = self.connect_to_endpoint(url)
             if json_response is not None:
-                all_tweets.extend(json_response.get('data', []))
+                tweet_data = json_response.get('data', [])
+                if tweet_data:
+                    existing_tweets = json.loads(self.get_blob_text(container_name, output_blob_name))
+                    updated_tweets = existing_tweets + tweet_data
+                    self.upload_blob_text(container_name, output_blob_name, json.dumps(updated_tweets, indent=4, sort_keys=True))
                 self.upload_blob_text(container_name, last_tweet_id_blob_name, chunk[-1])
             else:
                 failed_tweet_ids.update(chunk)
@@ -94,7 +96,6 @@ class TwitterAPI:
                 logging.info("Rate limit reached. Waiting 15 minutes before retrying...")
                 time.sleep(15 * 60)
 
-        self.upload_blob_text(container_name, output_blob_name, json.dumps(all_tweets, indent=4, sort_keys=True))
         logging.info(f"Data saved to blob: {output_blob_name}")
 
 def run_app():
