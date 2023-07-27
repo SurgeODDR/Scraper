@@ -42,38 +42,43 @@ class TwitterAPI:
             return blob_client.download_blob().readall().decode('utf-8')
         except ResourceNotFoundError as e:
             logging.error(f"Blob not found: {blob_name}", exc_info=True)
-            raise e
+            return None
 
     def upload_blob_text(self, container_name, blob_name, content):
-        logging.info(f"Uploading blob: {blob_name}")
-        blob_client = self.blob_service_client.get_blob_client(container_name, blob_name)
-        blob_client.upload_blob(content, overwrite=True)
+        try:
+            logging.info(f"Uploading blob: {blob_name}")
+            blob_client = self.blob_service_client.get_blob_client(container_name, blob_name)
+            blob_client.upload_blob(content, overwrite=True)
+        except Exception as e:
+            logging.error(f"Error uploading blob: {blob_name}", exc_info=True)
 
     def get_tweet_ids_from_file(self, container_name, blob_name):
         ids_text = self.get_blob_text(container_name, blob_name)
-        return ids_text.strip().split('\n')
+        if ids_text is not None:
+            return ids_text.strip().split('\n')
+        else:
+            return []
 
     def main(self, container_name, tweet_ids_blob_name, output_blob_name, last_tweet_id_blob_name, failed_tweet_ids_blob_name):
         logging.info("Fetching tweet IDs")
         tweet_ids = self.get_tweet_ids_from_file(container_name, tweet_ids_blob_name)
 
-        try:
-            last_tweet_id = self.get_blob_text(container_name, last_tweet_id_blob_name).strip()
+        last_tweet_id = self.get_blob_text(container_name, last_tweet_id_blob_name)
+        if last_tweet_id is not None:
+            last_tweet_id = last_tweet_id.strip()
             tweet_ids = tweet_ids[tweet_ids.index(last_tweet_id) + 1:]
-        except Exception as e:
-            logging.error("Error reading last_tweet_id_blob", exc_info=True)
 
-        try:
-            failed_tweet_ids = set(self.get_blob_text(container_name, failed_tweet_ids_blob_name).strip().split('\n'))
+        failed_tweet_ids_text = self.get_blob_text(container_name, failed_tweet_ids_blob_name)
+        if failed_tweet_ids_text is not None:
+            failed_tweet_ids = set(failed_tweet_ids_text.strip().split('\n'))
             tweet_ids = [id for id in tweet_ids if id not in failed_tweet_ids]
-        except Exception as e:
-            logging.error("Error reading failed_tweet_ids_blob", exc_info=True)
+        else:
             failed_tweet_ids = set()
 
-        try:
-            all_tweets = json.loads(self.get_blob_text(container_name, output_blob_name))
-        except Exception as e:
-            logging.error("Error reading output_blob", exc_info=True)
+        all_tweets_text = self.get_blob_text(container_name, output_blob_name)
+        if all_tweets_text is not None:
+            all_tweets = json.loads(all_tweets_text)
+        else:
             all_tweets = []
 
         chunks = [tweet_ids[i:i + 100] for i in range(0, len(tweet_ids), 100)]
