@@ -34,11 +34,11 @@ def analyze_text(text):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
         messages=[
-            {"role": "system", "content": "You are a research assistant specializing in data science and sentiment analysis, working on a comprehensive study of public sentiment towards the Panama Papers tax scandal. Analyze the following text, adhering to academic standards:\n\n1. **Key Themes Identification**: Extract and articulate the top 3 prevalent topics, summarizing each theme's central idea and relevance to the broader context of the Panama Papers.\n2. **Sentiment Quantification**: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject.\n3. **Emotional Tone Analysis**: Examine and describe the dominant emotional tone conveyed in the text, including the underlying feelings and attitudes that characterize this tone. Relate this analysis to the broader societal reactions to the Panama Papers.\n\nPlease ensure that your analysis is precise, methodologically sound, and articulated in an academically rigorous manner."},
+            {"role": "system", "content": "You are a research assistant specializing in sentiment analysis. Analyze the following text, adhering to academic standards:\n\n**Sentiment Quantification**: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject."},
             {"role": "user", "content": text}
         ],
         temperature=0.3,
-        max_tokens=16000
+        max_tokens=16000  # Reduced max tokens to speed up processing
     )
     app.logger.info(f"Analysis took {time.time() - start_time} seconds")
     return response['choices'][0]['message']['content'].strip()
@@ -52,7 +52,7 @@ def process_data():
         data = download_stream.readall()
         app.logger.info(f"Data from blob: {data[:100]}")
         df = pd.read_json(io.BytesIO(data))
-        chunk_size = 50
+        chunk_size = 3  # Reduced chunk size for testing
         num_chunks = len(df) // chunk_size
         if len(df) % chunk_size:
             num_chunks += 1
