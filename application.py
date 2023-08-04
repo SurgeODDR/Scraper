@@ -41,7 +41,7 @@ def analyze_text_in_chunks(df, chunk_size=10):
                 {"role": "user", "content": text}
             ],
             temperature=0.3,
-            max_tokens=16000
+            max_tokens=16000 - len(text) // 4  # adjust the number of output tokens to account for the input length
         )
         df.loc[chunk.index, 'Analysis'] = response['choices'][0]['message']['content'].strip()
     return df
