@@ -9,6 +9,7 @@ import io
 import json
 import logging
 import time
+from docx import Document
 
 # Create a Flask instance
 app = Flask(__name__)
@@ -47,10 +48,10 @@ def process_data():
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
     download_stream = blob_client.download_blob()
     data = download_stream.readall()
-    app.logger.info(f"Data from blob: {data[:100]}")  # Log the first 100 characters of the data
+    app.logger.info(f"Data from blob: {data[:100]}")
     df = pd.read_json(io.BytesIO(data))
 
-    chunk_size = 100  # Adjust this value based on your needs
+    chunk_size = 100
     num_chunks = len(df) // chunk_size
     if len(df) % chunk_size:
         num_chunks += 1
@@ -67,13 +68,14 @@ def process_data():
 
             start = i * chunk_size
             end = start + chunk_size
-            df_chunk = df[start:end]
+            df_chunk = df[start:end].copy()
+            app.logger.info(f"Analyzing chunk {i + 1}")
             df_chunk['Analysis'] = df_chunk['text'].apply(analyze_text)
             chunk_json = df_chunk.to_json(orient='records')
             chunk_blob_client.upload_blob(chunk_json, overwrite=True)
 
             app.logger.info(f"Finished processing chunk {i + 1}")
-            time.sleep(5)  # Add a delay to prevent overloading the server
+            time.sleep(5)
         except Exception as e:
             app.logger.error(f"Error processing chunk {i + 1}: {str(e)}")
 
@@ -105,21 +107,29 @@ def summarize_data():
     """Fetches the analysis results from Azure Storage and generates a summary."""
     global df
 
-    # Create a BlobServiceClient using the credential
-    logging.info("Fetching analysed data from Azure Storage...")
-    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+    if df is None:
+        return jsonify({'error': 'No data available'}), 400
 
-    # Get the blob client for the JSON file
+    # Fetch the blob service client from the Azure Storage
+    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+    
+    # Get the blob client for the consolidated JSON file
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
 
     # Download the JSON file
     download_stream = blob_client.download_blob()
-    data = download_stream.readall()
-    df = pd.read_json(io.BytesIO(data))
+    df = pd.read_json(io.BytesIO(download_stream.readall()))
 
     # Generate a summary of the analysis results
-    logging.info("Generating summary of analysis results...")
-    summary = summarize_results(df['Analysis'].to_string())
+    summary = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a research assistant who has analyzed public sentiment towards the Panama Papers tax scandal using topic modeling, sentiment analysis, and emotional tone analysis. Your task is to create an academic summary of the findings. Here are the analysis results:"},
+            {"role": "user", "content": df['Analysis'].to_string()}
+        ],
+        temperature=0.3,
+        max_tokens=12000
+    )['choices'][0]['message']['content'].strip()
 
     # Create a Document instance
     doc = Document()
@@ -130,11 +140,10 @@ def summarize_data():
     # Save the document to a .docx file
     doc.save('/tmp/Summary.docx')
 
-    # Create a BlobClient for the .docx file
+    # Create a BlobClient instance
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Summary.docx")
 
     # Upload the .docx file to the blob
-    logging.info("Uploading summary to Azure Storage...")
     with open('/tmp/Summary.docx', 'rb') as data:
         blob_client.upload_blob(data)
 
