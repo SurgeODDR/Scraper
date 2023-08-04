@@ -2,3 +2,10 @@ requests
 azure-storage-blob
 azure-identity
 azure-keyvault-secrets
+flask
+pandas
+openai
+python-dotenv
+textwrap3
+azure-identity
+azure-storage-blob
