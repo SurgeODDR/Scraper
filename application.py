@@ -10,6 +10,7 @@ import json
 import logging
 import time
 from docx import Document
+from azure.core.exceptions import AzureError
 
 # Create a Flask instance
 app = Flask(__name__)
@@ -44,42 +45,40 @@ def analyze_text(text):
 
 @app.route('/process', methods=['GET'])
 def process_data():
-    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-    download_stream = blob_client.download_blob()
-    data = download_stream.readall()
-    app.logger.info(f"Data from blob: {data[:100]}")
-    df = pd.read_json(io.BytesIO(data))
+    try:
+        blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
+        download_stream = blob_client.download_blob()
+        data = download_stream.readall()
+        app.logger.info(f"Data from blob: {data[:100]}")
+        df = pd.read_json(io.BytesIO(data))
+        chunk_size = 50
+        num_chunks = len(df) // chunk_size
+        if len(df) % chunk_size:
+            num_chunks += 1
+        app.logger.info(f"Processing {num_chunks} chunks")
 
-    chunk_size = 50
-    num_chunks = len(df) // chunk_size
-    if len(df) % chunk_size:
-        num_chunks += 1
-
-    app.logger.info(f"Processing {num_chunks} chunks")
-
-    for i in range(num_chunks):
-        app.logger.info(f"Processing chunk {i + 1} of {num_chunks}")
-        try:
+        for i in range(num_chunks):
+            app.logger.info(f"Processing chunk {i + 1} of {num_chunks}")
             chunk_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", f"Analysed_Tweets_{i}.json")
             if chunk_blob_client.exists():
                 app.logger.info(f"Chunk {i + 1} already processed, skipping")
                 continue
-
             start = i * chunk_size
             end = start + chunk_size
             df_chunk = df[start:end].copy()
             app.logger.info(f"Analyzing chunk {i + 1}")
             df_chunk['Analysis'] = df_chunk['text'].apply(analyze_text)
             chunk_json = df_chunk.to_json(orient='records')
+            app.logger.info(f"Uploading chunk {i + 1} to blob")
             chunk_blob_client.upload_blob(chunk_json, overwrite=True)
-
             app.logger.info(f"Finished processing chunk {i + 1}, saved to blob")
-            time.sleep(5) # This delay helps to avoid hitting any API limits
-        except Exception as e:
-            app.logger.error(f"Error processing chunk {i + 1}: {str(e)}")
-            continue
-
+            time.sleep(5)  # This delay helps to avoid hitting any API limits
+    except AzureError as ae:
+        app.logger.error(f"AzureError encountered: {str(ae)}")
+    except Exception as e:
+        app.logger.error(f"General error encountered: {str(e)}")
+    
     return jsonify({'message': 'Data processed successfully'}), 200
 
 @app.route('/consolidate', methods=['GET'])
