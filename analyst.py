@@ -6,9 +6,11 @@ from azure.keyvault.secrets import SecretClient
 import os
 import textwrap
 from azure.storage.blob import BlobServiceClient
+import logging
 
 # Create a Flask instance
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
 
 # Initialize a global variable for the DataFrame
 df = None
@@ -40,14 +42,22 @@ def analyze_text(text):
 def process_data():
     """Fetches the data from Azure Storage and performs the analysis."""
     global df
-    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-    download_stream = blob_client.download_blob()
-    df = pd.read_json(download_stream.readall())
-    df = df[['text']]
-    df['Analysis'] = df['text'].apply(analyze_text)
-    df.to_json('Analysed_Tweets.json', orient='records')
-    return jsonify({'message': 'Data processed successfully'}), 200
+
+    app.logger.info('Processing data...')
+
+    try:
+        blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
+        download_stream = blob_client.download_blob()
+        df = pd.read_json(download_stream.readall())
+        df = df[['text']]
+        df['Analysis'] = df['text'].apply(analyze_text)
+        df.to_json('Analysed_Tweets.json', orient='records')
+        app.logger.info('Data processed successfully.')
+        return jsonify({'message': 'Data processed successfully'}), 200
+    except Exception as e:
+        app.logger.error(f'Error processing data: {e}')
+        return jsonify({'error': 'Error processing data'}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
