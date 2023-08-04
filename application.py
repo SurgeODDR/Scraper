@@ -29,7 +29,7 @@ secret_client = SecretClient(vault_url=key_vault_uri, credential=credential)
 openai.api_key = secret_client.get_secret("openai-api-key").value
 
 def analyze_text(text):
-    """Performs topic modeling, sentiment analysis, and emotional tone analysis using GPT-3."""
+    start_time = time.time()
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
         messages=[
@@ -37,13 +37,13 @@ def analyze_text(text):
             {"role": "user", "content": text}
         ],
         temperature=0.3,
-        max_tokens=16000 # Increased to match the model's token limit
+        max_tokens=16000
     )
+    app.logger.info(f"Analysis took {time.time() - start_time} seconds")
     return response['choices'][0]['message']['content'].strip()
 
 @app.route('/process', methods=['GET'])
 def process_data():
-    """Fetches the data from Azure Storage and performs the analysis."""
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
     download_stream = blob_client.download_blob()
@@ -51,7 +51,7 @@ def process_data():
     app.logger.info(f"Data from blob: {data[:100]}")
     df = pd.read_json(io.BytesIO(data))
 
-    chunk_size = 100
+    chunk_size = 50
     num_chunks = len(df) // chunk_size
     if len(df) % chunk_size:
         num_chunks += 1
