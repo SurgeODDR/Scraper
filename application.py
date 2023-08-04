@@ -33,11 +33,11 @@ def analyze_text(text):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
-            {"role": "system", "content": "You are a research assistant analyzing public sentiment towards the Panama Papers tax scandal. Analyze the following text for key themes, sentiment, and emotional tone:"},
+            {"role": "system", "content": "You are a research assistant specializing in data science and sentiment analysis, working on a comprehensive study of public sentiment towards the Panama Papers tax scandal. Analyze the following text, adhering to academic standards:\n\n1. **Key Themes Identification**: Extract and articulate the top 3 prevalent topics, summarizing each theme's central idea and relevance to the broader context of the Panama Papers.\n2. **Sentiment Quantification**: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject.\n3. **Emotional Tone Analysis**: Examine and describe the dominant emotional tone conveyed in the text, including the underlying feelings and attitudes that characterize this tone. Relate this analysis to the broader societal reactions to the Panama Papers.\n\nPlease ensure that your analysis is precise, methodologically sound, and articulated in an academically rigorous manner."},
             {"role": "user", "content": text}
         ],
         temperature=0.3,
-        max_tokens=200
+        max_tokens=16000 # Increased to match the model's token limit
     )
     return response['choices'][0]['message']['content'].strip()
 
