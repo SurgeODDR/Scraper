@@ -46,7 +46,9 @@ def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
     download_stream = blob_client.download_blob()
-    df = pd.read_json(io.BytesIO(download_stream.readall()))
+    data = download_stream.readall()
+    app.logger.info(f"Data from blob: {data[:100]}")  # Log the first 100 characters of the data
+    df = pd.read_json(io.BytesIO(data))
 
     chunk_size = 100  # Adjust this value based on your needs
     num_chunks = len(df) // chunk_size
@@ -111,10 +113,9 @@ def summarize_data():
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
 
     # Download the JSON file
-    download_stream = blob_client.download_blob().content_as_text()
-
-    # Load the data into a pandas DataFrame
-    df = pd.read_json(io.StringIO(download_stream))
+    download_stream = blob_client.download_blob()
+    data = download_stream.readall()
+    df = pd.read_json(io.BytesIO(data))
 
     # Generate a summary of the analysis results
     logging.info("Generating summary of analysis results...")
