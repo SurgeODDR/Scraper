@@ -48,8 +48,8 @@ def process_data():
     try:
         blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
         blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-        download_stream = blob_client.download_blob()
-        df = pd.read_json(download_stream.readall())
+        download_stream = blob_client.download_blob().readall()
+        df = pd.read_json(io.StringIO(download_stream.decode('utf-8')))
         df = df[['text']]
         df['Analysis'] = df['text'].apply(analyze_text)
         df.to_json('Analysed_Tweets.json', orient='records')
