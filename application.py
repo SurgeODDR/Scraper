@@ -74,10 +74,11 @@ def process_data():
             chunk_json = df_chunk.to_json(orient='records')
             chunk_blob_client.upload_blob(chunk_json, overwrite=True)
 
-            app.logger.info(f"Finished processing chunk {i + 1}")
-            time.sleep(5)
+            app.logger.info(f"Finished processing chunk {i + 1}, saved to blob")
+            time.sleep(5) # This delay helps to avoid hitting any API limits
         except Exception as e:
             app.logger.error(f"Error processing chunk {i + 1}: {str(e)}")
+            continue
 
     return jsonify({'message': 'Data processed successfully'}), 200
 
