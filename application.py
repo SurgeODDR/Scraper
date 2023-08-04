@@ -46,7 +46,7 @@ def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
     download_stream = blob_client.download_blob()
-    df = pd.read_json(io.BytesIO(download_stream.readall()), lines=True)
+    df = pd.read_json(io.BytesIO(download_stream.readall()))
 
     chunk_size = 100  # Adjust this value based on your needs
     num_chunks = len(df) // chunk_size
@@ -90,7 +90,7 @@ def consolidate_data():
             app.logger.info(f"Consolidating {blob.name}")
             blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", blob.name)
             download_stream = blob_client.download_blob()
-            df_chunk = pd.read_json(io.BytesIO(download_stream.readall()), lines=True)
+            df_chunk = pd.read_json(io.BytesIO(download_stream.readall()))
             df_consolidated = pd.concat([df_consolidated, df_chunk])
 
     consolidated_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
