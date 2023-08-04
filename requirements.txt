@@ -10,3 +10,4 @@ textwrap3
 azure-identity
 azure-storage-blob
 python-docx
+gunicorn
