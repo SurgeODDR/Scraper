@@ -34,7 +34,7 @@ def analyze_text(text):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
         messages=[
-            {"role": "system", "content": "You are a research assistant specializing in sentiment analysis. Analyze the following text, adhering to academic standards:\n\n**Sentiment Quantification**: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject."},
+            {"role": "system", "content": "You are a research assistant specializing in sentiment and emotion analysis. Analyze the following text, adhering to academic standards:\n\nSentiment Quantification: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject.\n\nEmotion Analysis: Identify and quantify the presence of key emotions such as happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment within the text. Provide an interpretation of these emotional tones in the context of the subject matter, such as the Panama Papers."}
             {"role": "user", "content": text}
         ],
         temperature=0.3,
