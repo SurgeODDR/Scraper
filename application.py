@@ -31,7 +31,7 @@ openai.api_key = secret_client.get_secret("openai-api-key").value
 def analyze_text(text):
     """Performs topic modeling, sentiment analysis, and emotional tone analysis using GPT-3."""
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-3.5-turbo-16k",
         messages=[
             {"role": "system", "content": "You are a research assistant specializing in data science and sentiment analysis, working on a comprehensive study of public sentiment towards the Panama Papers tax scandal. Analyze the following text, adhering to academic standards:\n\n1. **Key Themes Identification**: Extract and articulate the top 3 prevalent topics, summarizing each theme's central idea and relevance to the broader context of the Panama Papers.\n2. **Sentiment Quantification**: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject.\n3. **Emotional Tone Analysis**: Examine and describe the dominant emotional tone conveyed in the text, including the underlying feelings and attitudes that characterize this tone. Relate this analysis to the broader societal reactions to the Panama Papers.\n\nPlease ensure that your analysis is precise, methodologically sound, and articulated in an academically rigorous manner."},
             {"role": "user", "content": text}
@@ -122,7 +122,7 @@ def summarize_data():
 
     # Generate a summary of the analysis results
     summary = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-3.5-turbo-16k",
         messages=[
             {"role": "system", "content": "You are a research assistant who has analyzed public sentiment towards the Panama Papers tax scandal using topic modeling, sentiment analysis, and emotional tone analysis. Your task is to create an academic summary of the findings. Here are the analysis results:"},
             {"role": "user", "content": df['Analysis'].to_string()}
