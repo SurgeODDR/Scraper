@@ -1,17 +1,16 @@
 import io
-from flask import Flask, request, jsonify
-import pandas as pd
-import openai
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
 import os
 import textwrap
+import numpy as np
+import pandas as pd
+import openai
+from flask import Flask, jsonify
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 from azure.storage.blob import BlobServiceClient
-import logging
 
 # Create a Flask instance
 app = Flask(__name__)
-app.logger.setLevel(logging.INFO)
 
 # Initialize a global variable for the DataFrame
 df = None
@@ -27,7 +26,7 @@ secret_client = SecretClient(vault_url=key_vault_uri, credential=credential)
 openai.api_key = secret_client.get_secret("openai-api-key").value
 
 def analyze_text(text):
-    """Performs topic modeling, sentiment analysis, and emotional tone analysis using GPT-3."""
+    """Performs sentiment analysis using GPT-3."""
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
         messages=[
@@ -44,21 +43,31 @@ def process_data():
     """Fetches the data from Azure Storage and performs the analysis."""
     global df
 
-    app.logger.info('Processing data...')
+    # Connect to Azure Storage and download the data
+    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
+    download_stream = blob_client.download_blob().readall()
 
-    try:
-        blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-        download_stream = blob_client.download_blob().readall()
-        df = pd.read_json(io.StringIO(download_stream.decode('utf-8')))
-        df = df[['text']]
-        df['Analysis'] = df['text'].apply(analyze_text)
-        df.to_json('Analysed_Tweets.json', orient='records')
-        app.logger.info('Data processed successfully.')
-        return jsonify({'message': 'Data processed successfully'}), 200
-    except Exception as e:
-        app.logger.error(f'Error processing data: {e}')
-        return jsonify({'error': 'Error processing data'}), 500
+    # Load the data into a DataFrame
+    df = pd.read_json(io.StringIO(download_stream.decode('utf-8')))
+
+    # Only keep the 'text' column
+    df = df[['text']]
+
+    # Create a new column for chunk IDs
+    df['Chunk'] = np.arange(len(df)) // 100
+
+    # Apply sentiment analysis to each chunk separately
+    for _, chunk_df in df.groupby('Chunk'):
+        chunk_df['Analysis'] = chunk_df['text'].apply(analyze_text)
+
+    # Drop the 'Chunk' column
+    df = df.drop(columns=['Chunk'])
+
+    # Save the DataFrame to a JSON file
+    df.to_json('Analysed_Tweets.json', orient='records')
+
+    return jsonify({'message': 'Data processed successfully'}), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
