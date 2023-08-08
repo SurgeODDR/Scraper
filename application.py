@@ -1,3 +1,5 @@
+import signal
+from multiprocessing import Process
 from flask import Flask, request, jsonify
 import pandas as pd
 import openai
@@ -149,5 +151,34 @@ def summarize_data():
 
     return jsonify({'message': 'Summary created and saved successfully'}), 200
 
-if __name__ == "__main__":
+def run_app():
     app.run(debug=True)
+
+if __name__ == "__main__":
+    process = Process(target=run_app)
+    process.start()
+
+    while True:
+        try:
+            # Check every minute if the process is still alive
+            process.join(timeout=60)
+
+            # If the process finished (either normally or due to an error), exit the loop
+            if not process.is_alive():
+                break
+        except (KeyboardInterrupt, SystemExit):
+            # Gracefully shutdown
+            process.terminate()
+            process.join()
+            break
+        except Exception as e:
+            # Log the error for debugging purposes
+            app.logger.error(f"Exception encountered: {e}")
+
+            # Try to gracefully terminate the process
+            process.terminate()
+            process.join()
+
+            # Restart the Flask app in a new process
+            process = Process(target=run_app)
+            process.start()
