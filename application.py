@@ -35,7 +35,7 @@ def analyze_text(text):
         model="gpt-3.5-turbo-16k",
         messages=[
             {
-                "role": "researcher",
+                "role": "user",
                 "content": ("You are tasked with an analysis of sentiment and emotion within the provided "
                             "textual content, in accordance with academic standards. The examination is divided into two parts:\n\n"
                             "1. **Sentiment Quantification:**\n"
