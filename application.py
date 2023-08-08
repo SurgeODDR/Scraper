@@ -13,6 +13,7 @@ import logging
 import time
 from docx import Document
 from azure.core.exceptions import AzureError
+import requests
 
 # Create a Flask instance
 app = Flask(__name__)
@@ -151,6 +152,21 @@ def summarize_data():
 
     return jsonify({'message': 'Summary created and saved successfully'}), 200
 
+FLAG_TRIGGER_PROCESS = True  # Set this flag to True to trigger /process
+
+def monitor_and_trigger_process():
+    global FLAG_TRIGGER_PROCESS
+    while True:
+        if FLAG_TRIGGER_PROCESS:
+            try:
+                # Send a request to the /process endpoint
+                response = requests.get("https://gptanalyser.azurewebsites.net/process")
+                if response.status_code == 200:
+                    FLAG_TRIGGER_PROCESS = False  # Reset the flag after successful processing
+            except Exception as e:
+                app.logger.error(f"Failed to trigger /process: {e}")
+            time.sleep(60)  # Check every minute
+
 def run_app():
     app.run(debug=True)
 
@@ -158,27 +174,37 @@ if __name__ == "__main__":
     process = Process(target=run_app)
     process.start()
 
+    # Start the monitoring process
+    monitor_process = Process(target=monitor_and_trigger_process)
+    monitor_process.start()
+
     while True:
         try:
-            # Check every minute if the process is still alive
+            # Check every minute if the Flask process is still alive
             process.join(timeout=60)
-
-            # If the process finished (either normally or due to an error), exit the loop
             if not process.is_alive():
                 break
         except (KeyboardInterrupt, SystemExit):
             # Gracefully shutdown
             process.terminate()
+            monitor_process.terminate()
             process.join()
+            monitor_process.join()
             break
         except Exception as e:
             # Log the error for debugging purposes
             app.logger.error(f"Exception encountered: {e}")
 
-            # Try to gracefully terminate the process
+            # Try to gracefully terminate the processes
             process.terminate()
+            monitor_process.terminate()
             process.join()
+            monitor_process.join()
 
             # Restart the Flask app in a new process
             process = Process(target=run_app)
             process.start()
+
+            # Restart the monitoring process
+            monitor_process = Process(target=monitor_and_trigger_process)
+            monitor_process.start()
