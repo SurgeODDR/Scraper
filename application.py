@@ -34,26 +34,8 @@ def analyze_text(text):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
         messages=[
-            {
-                "role": "user",
-                "content": ("You are tasked with an analysis of sentiment and emotion within the provided "
-                            "textual content, in accordance with academic standards. The examination is divided into two parts:\n\n"
-                            "1. **Sentiment Quantification:**\n"
-                            "- **Quantification:** Determine the sentiment present in the text, providing a percentage distribution "
-                            "for positive, negative, and neutral sentiments.\n"
-                            "- **Thematic Analysis:** Identify mentions of inequality, unfairness, diminished trust in government, "
-                            "perceptions of corruption, unjust actions, or disloyalty.\n"
-                            "- **Interpretation:** Explain how these sentiments align with public opinions, especially if connected "
-                            "to well-known individuals such as celebrities or politicians.\n\n"
-                            "2. **Emotion Analysis:**\n"
-                            "- **Identification and Quantification:** Detect and quantify key emotions in the text, including "
-                            "happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, "
-                            "despair/hopelessness, shock/astonishment, relief, and empowerment.\n"
-                            "- **Thematic Emphasis:** Comment on sentiments indicating feelings of inequality, unfairness, or perceptions "
-                            "of corruption.\n"
-                            "- **Contextual Interpretation:** Provide an interpretation of these emotional tones in the context of "
-                            "significant events or subjects, such as the Panama Papers.")
-            }
+            {"role": "system", "content": "You are a research assistant specializing in sentiment and emotion analysis. Analyze the following text, adhering to academic standards:\n\nSentiment Quantification: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject. Investigate any mentions of inequality, unfairness, diminished trust in the government, unjust actions, disloyalty, and perceptions of corruption.\n\nEmotion Analysis: Identify and quantify the presence of key emotions such as happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment within the text. Provide an interpretation of these emotional tones in the context of the subject matter, such as the Panama Papers.\n\nSpecial Attention: Highlight any mentions of well-known figures such as celebrities, politicians, or other public figures, and analyze the sentiment and emotional tones associated with these mentions."}
+            {"role": "user", "content": text}
         ],
         temperature=0.3,
         max_tokens=16000  # Reduced max tokens to speed up processing
