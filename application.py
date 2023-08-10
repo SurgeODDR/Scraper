@@ -204,7 +204,7 @@ def summarize_data():
 
     # Upload the .docx file to the blob
     with open('/tmp/Summary.docx', 'rb') as data:
-        blob_client.upload_blob(data)
+        blob_client.upload_blob(data, overwrite=True)
 
     return jsonify({'message': 'Summary created and saved successfully'}), 200
 
