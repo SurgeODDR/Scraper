@@ -105,42 +105,57 @@ def consolidate_data():
 
     return jsonify({'message': 'Data consolidated successfully'}), 200
 
-@app.route('/summarize', methods=['GET'])
-@app.route('/summarize', methods=['GET'])
-def summarize_data():
-    global df
-
-    if df is None:
-        # Fetch the blob service client from the Azure Storage
-        blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-        
-        # Get the blob client for the consolidated JSON file
-        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
-
-        # Check if the blob exists
-        if not blob_client.exists():
-            return jsonify({'error': 'No data available'}), 400
-
-        # Download the JSON file
-        download_stream = blob_client.download_blob()
-        df = pd.read_json(io.BytesIO(download_stream.readall()))
-
-    # Generate a summary of the analysis results
-    summary = openai.ChatCompletion.create(
+def summarize_chunk(chunk_text):
+    """Summarizes a chunk of text using OpenAI."""
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo-16k",
         messages=[
-            {"role": "system", "content": "You are a research assistant who has analyzed public sentiment towards the Panama Papers tax scandal using topic modeling, sentiment analysis, and emotional tone analysis. Your task is to create an academic summary of the findings. Here are the analysis results:"},
-            {"role": "user", "content": df['Analysis'].to_string()}
+            {"role": "system", "content": "You are a research assistant specializing in sentiment and emotion analysis of public reactions to major events. Summarize the following analysis results related to the Panama Papers scandal."},
+            {"role": "user", "content": chunk_text}
         ],
         temperature=0.3,
         max_tokens=12000
-    )['choices'][0]['message']['content'].strip()
+    )
+    return response['choices'][0]['message']['content'].strip()
+
+@app.route('/summarize', methods=['GET'])
+def summarize_data():
+    # Get the blob client for the consolidated JSON file
+    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
+
+    # Download the JSON file
+    download_stream = blob_client.download_blob()
+    df = pd.read_json(io.BytesIO(download_stream.readall()))
+
+    # Split the data into chunks for summarization
+    chunk_size = 500
+    chunks = [df['Analysis'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
+
+    # Summarize each chunk, but first check if the summary for that chunk already exists
+    summaries = []
+    for i, chunk in enumerate(chunks):
+        summary_blob_name = f"Summary_Chunk_{i}.txt"
+        summary_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", summary_blob_name)
+        
+        if summary_blob_client.exists():
+            # Fetch the existing summary for this chunk
+            download_stream = summary_blob_client.download_blob()
+            summary = download_stream.readall().decode('utf-8')
+        else:
+            # Summarize the chunk and store the summary
+            summary = summarize_chunk(chunk)
+            summary_blob_client.upload_blob(summary, overwrite=True)
+        
+        summaries.append(summary)
+
+    # Combine the individual summaries to get a final summary
+    final_summary = " ".join(summaries)
 
     # Create a Document instance
     doc = Document()
 
-    # Add the summary to the document
-    doc.add_paragraph(summary)
+    # Add the final summary to the document
+    doc.add_paragraph(final_summary)
 
     # Save the document to a .docx file
     doc.save('/tmp/Summary.docx')
@@ -153,6 +168,7 @@ def summarize_data():
         blob_client.upload_blob(data)
 
     return jsonify({'message': 'Summary created and saved successfully'}), 200
+
 
 FLAG_TRIGGER_PROCESS = True  # Set this flag to True to trigger /process
 
