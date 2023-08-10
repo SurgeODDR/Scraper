@@ -170,7 +170,7 @@ def summarize_data():
         app.logger.info("Downloaded and loaded the consolidated JSON file.")
 
         # Split the data into chunks for summarization
-        chunk_size = 20
+        chunk_size = 10
         chunks = [df['Analysis'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
         app.logger.info(f"Data split into {len(chunks)} chunks.")
 
