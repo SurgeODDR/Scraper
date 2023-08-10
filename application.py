@@ -116,7 +116,46 @@ def consolidate_data():
     consolidated_blob_client.upload_blob(df_consolidated.to_json(orient='records'), overwrite=True)
 
     return jsonify({'message': 'Data consolidated successfully'}), 200
-
+def aggregate_analysis(chunk_text):
+    """Aggregates and summarizes a chunk of text using OpenAI and past analyses."""
+    
+    # Check if the aggregate_analysis.txt file exists
+    aggregate_path = "/tmp/aggregate_analysis.txt"
+    if os.path.exists(aggregate_path):
+        with open(aggregate_path, 'r') as file:
+            aggregate_text = file.read()
+    else:
+        aggregate_text = ""  # Initialize an empty string if the file doesn't exist
+    
+    headers = {
+        "Authorization": f"Bearer {openai.api_key}"
+    }
+    
+    # Send both the chunk and the aggregate text to the model
+    data = {
+        "model": "gpt-3.5-turbo-16k",
+        "messages": [
+            {"role": "system", "content": "You are a research assistant working on a thesis that focuses on quantifying sentiment and emotion analysis related to major events, particularly the Panama Papers scandal. When summarizing the following analysis results, it's essential to include specific quantified data, percentages, and figures. Provide a detailed summary that highlights and quantifies the distribution of sentiments, key emotions, mentions of inequality, perceptions of corruption, and any references to well-known figures. Make sure the summary is concise yet comprehensive, adhering to academic standards."},
+            {"role": "user", "content": aggregate_text + "\n" + chunk_text}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 12000
+    }
+    
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+    response_data = response.json()
+    
+    if 'choices' in response_data:
+        analysis = response_data['choices'][0]['message']['content'].strip()
+        
+        # Append the new analysis to the aggregate_analysis.txt
+        with open(aggregate_path, 'a') as file:
+            file.write("\n\nChunk Analysis:\n" + chunk_text + "\n\nSummary:\n" + analysis)
+        return analysis
+    else:
+        app.logger.error(f"Unexpected response from OpenAI: {response_data}")
+        return "Error summarizing the data."
+        
 def summarize_chunk(chunk_text):
     """Summarizes a chunk of text using OpenAI."""
     headers = {
@@ -126,7 +165,7 @@ def summarize_chunk(chunk_text):
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": ""You are a research assistant working on a thesis that focuses on quantifying sentiment and emotion analysis related to major events, particularly the Panama Papers scandal. When summarizing the following analysis results, it's essential to include specific quantified data, percentages, and figures. Provide a detailed summary that highlights and quantifies the distribution of sentiments, key emotions, mentions of inequality, perceptions of corruption, and any references to well-known figures. Make sure the summary is concise yet comprehensive, adhering to academic standards.""},
+            {"role": "system", "content": "You are a research assistant working on a thesis that focuses on quantifying sentiment and emotion analysis related to major events, particularly the Panama Papers scandal. When summarizing the following analysis results, it's essential to include specific quantified data, percentages, and figures. Provide a detailed summary that highlights and quantifies the distribution of sentiments, key emotions, mentions of inequality, perceptions of corruption, and any references to well-known figures. Make sure the summary is concise yet comprehensive, adhering to academic standards."},
             {"role": "user", "content": chunk_text}
         ],
         "temperature": 0.3,
@@ -134,14 +173,6 @@ def summarize_chunk(chunk_text):
     }
     
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-    
-    if response.status_code == 429:
-        # Rate limit exceeded
-        reset_time = int(response.headers['openai-ratelimit-reset'])
-        sleep_time = reset_time - time.time() + 5  # Add an extra 5 seconds buffer
-        time.sleep(sleep_time)
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-    
     response_data = response.json()
     
     if 'choices' in response_data:
@@ -150,6 +181,44 @@ def summarize_chunk(chunk_text):
         app.logger.error(f"Unexpected response from OpenAI: {response_data}")
         return "Error summarizing the data."
         
+def update_aggregate_analysis(summary_chunk):
+    """Updates the aggregate_analysis.txt with the summary_chunk."""
+    
+    # Check if the aggregate_analysis.txt file exists
+    aggregate_path = "/tmp/aggregate_analysis.txt"
+    if os.path.exists(aggregate_path):
+        with open(aggregate_path, 'r') as file:
+            aggregate_text = file.read()
+    else:
+        aggregate_text = ""
+
+    headers = {
+        "Authorization": f"Bearer {openai.api_key}"
+    }
+    
+    # Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
+    data = {
+        "model": "gpt-3.5-turbo-16k",
+        "messages": [
+            {"role": "system", "content": "You are tasked with updating the aggregate analysis with the new summary provided. Integrate the new summary into the existing aggregate analysis in a way that maintains a cohesive and comprehensive narrative."},
+            {"role": "user", "content": aggregate_text + "\n\n" + summary_chunk}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 12000
+    }
+    
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+    response_data = response.json()
+
+    if 'choices' in response_data:
+        updated_text = response_data['choices'][0]['message']['content'].strip()
+        
+        # Write the updated text to the aggregate_analysis.txt
+        with open(aggregate_path, 'w') as file:
+            file.write(updated_text)
+    else:
+        app.logger.error(f"Unexpected response from OpenAI: {response_data}")
+       
 
 @app.route('/summarize', methods=['GET'])
 def summarize_data():
@@ -157,70 +226,49 @@ def summarize_data():
         # Initialize the BlobServiceClient
         blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
         
-        # Log the type of blob_service_client to ensure it's initialized
-        app.logger.info(f"Type of blob_service_client: {type(blob_service_client)}")
-        
         # Get the blob client for the consolidated JSON file
         blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
 
         # Download the JSON file
-        app.logger.info("Downloading the consolidated JSON file.")
         download_stream = blob_client.download_blob()
         df = pd.read_json(io.BytesIO(download_stream.readall()))
-        app.logger.info("Downloaded and loaded the consolidated JSON file.")
 
         # Split the data into chunks for summarization
         chunk_size = 10
         chunks = [df['Analysis'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
-        app.logger.info(f"Data split into {len(chunks)} chunks.")
 
-        # Summarize each chunk, but first check if the summary for that chunk already exists
-        summaries = []
+        # Summarize each chunk and update aggregate analysis
         for i, chunk in enumerate(chunks):
             summary_blob_name = f"Summary_Chunk_{i}.txt"
             summary_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", summary_blob_name)
             
-            if summary_blob_client.exists():
-                # Fetch the existing summary for this chunk
-                app.logger.info(f"Fetching the existing summary for chunk {i}.")
-                download_stream = summary_blob_client.download_blob()
-                summary = download_stream.readall().decode('utf-8')
-            else:
-                # Summarize the chunk and store the summary
-                app.logger.info(f"Summarizing chunk {i}.")
+            if not summary_blob_client.exists():
+                # Summarize the chunk
                 summary = summarize_chunk(chunk)
+                # Store the summary
                 summary_blob_client.upload_blob(summary, overwrite=True)
-            
-            summaries.append(summary)
+                # Update the aggregate analysis with this summary
+                update_aggregate_analysis(summary)
         
-        # Combine the individual summaries to get a final summary
-        final_summary = " ".join(summaries)
-        app.logger.info("Combined individual summaries into a final summary.")
+        # After all chunks are processed, fetch the final aggregate analysis
+        with open("/tmp/aggregate_analysis.txt", 'r') as file:
+            final_summary = file.read()
 
-        # Summarize the final summary to get a more concise version
-        app.logger.info("Generating a summarized version of the final summary.")
-        summarized_final_summary = summarize_chunk(final_summary)
-
-        # Create a Document instance
+        # Create a Document instance and add the final summary to it
         doc = Document()
-
-        # Add the summarized final summary to the document
-        doc.add_paragraph(summarized_final_summary)
+        doc.add_paragraph(final_summary)
 
         # Save the document to a .docx file
         doc_path = '/tmp/Final_Summary.docx'
         doc.save(doc_path)
-        app.logger.info(f"Saved the summarized final summary to {doc_path}.")
 
-        # Create a BlobClient instance
+        # Upload the .docx file to Azure Blob Storage
         blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Final_Summary.docx")
-
-        # Upload the .docx file to the blob
         with open(doc_path, 'rb') as data:
             blob_client.upload_blob(data, overwrite=True)
-        app.logger.info("Uploaded the summarized final summary to Azure Blob Storage.")
 
         return jsonify({'message': 'Final summary created and saved successfully'}), 200
+
     except Exception as e:
         app.logger.error(f"Error in /summarize route: {e}")
         return jsonify({'error': 'An error occurred while summarizing the data.'}), 500
