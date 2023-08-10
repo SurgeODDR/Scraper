@@ -130,7 +130,14 @@ def summarize_chunk(chunk_text):
         time.sleep(sleep_time)
         response = requests.post("https://api.openai.com/v1/engines/gpt-3.5-turbo-16k/completions", headers=headers, json=data)
     
-    return response.json()['choices'][0]['message']['content'].strip()
+    response_data = response.json()
+    
+    if 'choices' in response_data:
+        return response_data['choices'][0]['message']['content'].strip()
+    else:
+        app.logger.error(f"Unexpected response from OpenAI: {response_data}")
+        return "Error summarizing the data."
+        
 
 @app.route('/summarize', methods=['GET'])
 def summarize_data():
