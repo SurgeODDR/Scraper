@@ -162,10 +162,15 @@ def summarize_chunk(chunk_text):
         "Authorization": f"Bearer {openai.api_key}"
     }
     
+    tweet_count = len(chunk_text.split('\n'))
+    
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": "You are a research assistant working on a thesis that focuses on quantifying sentiment and emotion analysis related to major events, particularly the Panama Papers scandal. When summarizing the following analysis results, it's essential to include specific quantified data, percentages, and figures. Provide a detailed summary that highlights and quantifies the distribution of sentiments, key emotions, mentions of inequality, perceptions of corruption, and any references to well-known figures. Make sure the summary is concise yet comprehensive, adhering to academic standards."},
+            {
+                "role": "system",
+                "content": f"You are a research assistant working on a thesis that focuses on quantifying sentiment and emotion analysis related to major events, particularly the Panama Papers scandal. You are analyzing a set of {tweet_count} tweets. When summarizing the following analysis results, it's essential to include specific quantified data, percentages, and figures. Provide a detailed summary that highlights and quantifies the distribution of sentiments, key emotions, mentions of inequality, perceptions of corruption, and any references to well-known figures. Make sure the summary is concise yet comprehensive, adhering to academic standards."
+            },
             {"role": "user", "content": chunk_text}
         ],
         "temperature": 0.3,
