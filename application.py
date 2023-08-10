@@ -34,17 +34,29 @@ openai.api_key = secret_client.get_secret("openai-api-key").value
 
 def analyze_text(text):
     start_time = time.time()
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-16k",
-        messages=[
+    headers = {
+        "Authorization": f"Bearer {openai.api_key}"
+    }
+    
+    data = {
+        "model": "gpt-3.5-turbo-16k",
+        "messages": [
             {"role": "system", "content": "You are a research assistant specializing in sentiment and emotion analysis. Analyze the following text, adhering to academic standards:\n\nSentiment Quantification: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject. Investigate any mentions of inequality, unfairness, diminished trust in the government, unjust actions, disloyalty, and perceptions of corruption.\n\nEmotion Analysis: Identify and quantify the presence of key emotions such as happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment within the text. Provide an interpretation of these emotional tones in the context of the subject matter, such as the Panama Papers.\n\nSpecial Attention: Highlight any mentions of well-known figures such as celebrities, politicians, or other public figures, and analyze the sentiment and emotional tones associated with these mentions."},
             {"role": "user", "content": text}
         ],
-        temperature=0.3,
-        max_tokens=16000  # Reduced max tokens to speed up processing
-    )
-    app.logger.info(f"Analysis took {time.time() - start_time} seconds")
-    return response['choices'][0]['message']['content'].strip()
+        "temperature": 0.3,
+        "max_tokens": 16000
+    }
+    
+    response = requests.post("https://api.openai.com/v1/engines/gpt-3.5-turbo-16k/completions", headers=headers, json=data)
+    response_data = response.json()
+
+    if 'choices' in response_data:
+        app.logger.info(f"Analysis took {time.time() - start_time} seconds")
+        return response_data['choices'][0]['message']['content'].strip()
+    else:
+        app.logger.error(f"Unexpected response from OpenAI: {response_data}")
+        return "Error analyzing the text."
 
 @app.route('/process', methods=['GET'])
 def process_data():
