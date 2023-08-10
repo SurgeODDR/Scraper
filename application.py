@@ -195,17 +195,24 @@ def summarize_chunk(chunk_text):
         return "Error summarizing the data."
         
 def update_aggregate_analysis(summary_chunk):
-    """Updates the aggregate_analysis.txt with the summary_chunk."""
+    """Updates the aggregate_analysis.txt with the summary_chunk and uploads it to Azure Blob Storage."""
     
-    # Check if the aggregate_analysis.txt file exists
     aggregate_path = "/tmp/aggregate_analysis.txt"
-    if os.path.exists(aggregate_path):
+    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+    
+    # Check if the aggregate_analysis.txt file exists in Blob Storage
+    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "aggregate_analysis.txt")
+    if blob_client.exists():
+        # Download the file from Blob Storage
+        download_stream = blob_client.download_blob()
+        with open(aggregate_path, 'wb') as file:
+            file.write(download_stream.readall())
         with open(aggregate_path, 'r') as file:
             aggregate_text = file.read()
     else:
         aggregate_text = ""
-        logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
-
+        logging.info("aggregate_analysis.txt does not exist in Blob Storage. Initializing an empty string for aggregate_text.")
+    
     headers = {
         "Authorization": f"Bearer {openai.api_key}"
     }
@@ -231,6 +238,12 @@ def update_aggregate_analysis(summary_chunk):
         with open(aggregate_path, 'w') as file:
             file.write(updated_text)
         logging.info(f"Updated {aggregate_path} successfully")
+
+        # Upload the updated aggregate_analysis.txt to Azure Blob Storage
+        with open(aggregate_path, 'rb') as data:
+            blob_client.upload_blob(data, overwrite=True)
+        logging.info(f"Uploaded {aggregate_path} to Azure Blob Storage successfully")
+
     else:
         error_message = f"Unexpected response from OpenAI: {response_data}"
         app.logger.error(error_message)
