@@ -19,6 +19,9 @@ import requests
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
 
+# Configure logging for Azure Log Stream
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
 # Initialize a global variable for the DataFrame
 df = None
 
@@ -126,6 +129,7 @@ def aggregate_analysis(chunk_text):
             aggregate_text = file.read()
     else:
         aggregate_text = ""  # Initialize an empty string if the file doesn't exist
+        logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
     
     headers = {
         "Authorization": f"Bearer {openai.api_key}"
@@ -151,9 +155,12 @@ def aggregate_analysis(chunk_text):
         # Append the new analysis to the aggregate_analysis.txt
         with open(aggregate_path, 'a') as file:
             file.write("\n\nChunk Analysis:\n" + chunk_text + "\n\nSummary:\n" + analysis)
+        logging.info(f"Appended to {aggregate_path} successfully")
         return analysis
     else:
-        app.logger.error(f"Unexpected response from OpenAI: {response_data}")
+        error_message = f"Unexpected response from OpenAI: {response_data}"
+        app.logger.error(error_message)
+        logging.error(error_message)
         return "Error summarizing the data."
         
 def summarize_chunk(chunk_text):
@@ -196,6 +203,7 @@ def update_aggregate_analysis(summary_chunk):
             aggregate_text = file.read()
     else:
         aggregate_text = ""
+        logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
 
     headers = {
         "Authorization": f"Bearer {openai.api_key}"
@@ -221,8 +229,11 @@ def update_aggregate_analysis(summary_chunk):
         # Write the updated text to the aggregate_analysis.txt
         with open(aggregate_path, 'w') as file:
             file.write(updated_text)
+        logging.info(f"Updated {aggregate_path} successfully")
     else:
-        app.logger.error(f"Unexpected response from OpenAI: {response_data}")
+        error_message = f"Unexpected response from OpenAI: {response_data}"
+        app.logger.error(error_message)
+        logging.error(error_message)
        
 
 @app.route('/summarize', methods=['GET'])
