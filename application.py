@@ -107,16 +107,30 @@ def consolidate_data():
 
 def summarize_chunk(chunk_text):
     """Summarizes a chunk of text using OpenAI."""
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-16k",
-        messages=[
+    headers = {
+        "Authorization": f"Bearer {openai.api_key}"
+    }
+    
+    data = {
+        "model": "gpt-3.5-turbo-16k",
+        "messages": [
             {"role": "system", "content": "You are a research assistant specializing in sentiment and emotion analysis of public reactions to major events. Summarize the following analysis results related to the Panama Papers scandal."},
             {"role": "user", "content": chunk_text}
         ],
-        temperature=0.3,
-        max_tokens=12000
-    )
-    return response['choices'][0]['message']['content'].strip()
+        "temperature": 0.3,
+        "max_tokens": 12000
+    }
+    
+    response = requests.post("https://api.openai.com/v1/engines/gpt-3.5-turbo-16k/completions", headers=headers, json=data)
+    
+    if response.status_code == 429:
+        # Rate limit exceeded
+        reset_time = int(response.headers['openai-ratelimit-reset'])
+        sleep_time = reset_time - time.time() + 5  # Add an extra 5 seconds buffer
+        time.sleep(sleep_time)
+        response = requests.post("https://api.openai.com/v1/engines/gpt-3.5-turbo-16k/completions", headers=headers, json=data)
+    
+    return response.json()['choices'][0]['message']['content'].strip()
 
 @app.route('/summarize', methods=['GET'])
 def summarize_data():
