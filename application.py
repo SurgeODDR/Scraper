@@ -48,7 +48,7 @@ def analyze_text(text):
         "max_tokens": 16000
     }
     
-    response = requests.post("https://api.openai.com/v1/engines/gpt-3.5-turbo-16k/completions", headers=headers, json=data)
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
     response_data = response.json()
 
     if 'choices' in response_data:
@@ -133,14 +133,14 @@ def summarize_chunk(chunk_text):
         "max_tokens": 12000
     }
     
-    response = requests.post("https://api.openai.com/v1/engines/gpt-3.5-turbo-16k/completions", headers=headers, json=data)
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
     
     if response.status_code == 429:
         # Rate limit exceeded
         reset_time = int(response.headers['openai-ratelimit-reset'])
         sleep_time = reset_time - time.time() + 5  # Add an extra 5 seconds buffer
         time.sleep(sleep_time)
-        response = requests.post("https://api.openai.com/v1/engines/gpt-3.5-turbo-16k/completions", headers=headers, json=data)
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
     
     response_data = response.json()
     
