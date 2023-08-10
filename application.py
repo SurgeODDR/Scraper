@@ -120,6 +120,9 @@ def summarize_chunk(chunk_text):
 
 @app.route('/summarize', methods=['GET'])
 def summarize_data():
+    # Initialize the BlobServiceClient
+    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+    
     # Get the blob client for the consolidated JSON file
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
 
