@@ -106,22 +106,24 @@ def consolidate_data():
     return jsonify({'message': 'Data consolidated successfully'}), 200
 
 @app.route('/summarize', methods=['GET'])
+@app.route('/summarize', methods=['GET'])
 def summarize_data():
-    """Fetches the analysis results from Azure Storage and generates a summary."""
     global df
 
     if df is None:
-        return jsonify({'error': 'No data available'}), 400
+        # Fetch the blob service client from the Azure Storage
+        blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+        
+        # Get the blob client for the consolidated JSON file
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
 
-    # Fetch the blob service client from the Azure Storage
-    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    
-    # Get the blob client for the consolidated JSON file
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
+        # Check if the blob exists
+        if not blob_client.exists():
+            return jsonify({'error': 'No data available'}), 400
 
-    # Download the JSON file
-    download_stream = blob_client.download_blob()
-    df = pd.read_json(io.BytesIO(download_stream.readall()))
+        # Download the JSON file
+        download_stream = blob_client.download_blob()
+        df = pd.read_json(io.BytesIO(download_stream.readall()))
 
     # Generate a summary of the analysis results
     summary = openai.ChatCompletion.create(
