@@ -153,60 +153,77 @@ def summarize_chunk(chunk_text):
 
 @app.route('/summarize', methods=['GET'])
 def summarize_data():
-    # Initialize the BlobServiceClient
-    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    
-    # Log the type of blob_service_client to ensure it's initialized
-    app.logger.info(f"Type of blob_service_client: {type(blob_service_client)}")
-    
-    # Get the blob client for the consolidated JSON file
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
-
-    # Download the JSON file
-    download_stream = blob_client.download_blob()
-    df = pd.read_json(io.BytesIO(download_stream.readall()))
-
-    # Split the data into chunks for summarization
-    chunk_size = 500
-    chunks = [df['Analysis'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
-
-    # Summarize each chunk, but first check if the summary for that chunk already exists
-    summaries = []
-    for i, chunk in enumerate(chunks):
-        summary_blob_name = f"Summary_Chunk_{i}.txt"
-        summary_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", summary_blob_name)
+    try:
+        # Initialize the BlobServiceClient
+        blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
         
-        if summary_blob_client.exists():
-            # Fetch the existing summary for this chunk
-            download_stream = summary_blob_client.download_blob()
-            summary = download_stream.readall().decode('utf-8')
-        else:
-            # Summarize the chunk and store the summary
-            summary = summarize_chunk(chunk)
-            summary_blob_client.upload_blob(summary, overwrite=True)
+        # Log the type of blob_service_client to ensure it's initialized
+        app.logger.info(f"Type of blob_service_client: {type(blob_service_client)}")
         
-        summaries.append(summary)
+        # Get the blob client for the consolidated JSON file
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
 
-    # Combine the individual summaries to get a final summary
-    final_summary = " ".join(summaries)
+        # Download the JSON file
+        app.logger.info("Downloading the consolidated JSON file.")
+        download_stream = blob_client.download_blob()
+        df = pd.read_json(io.BytesIO(download_stream.readall()))
+        app.logger.info("Downloaded and loaded the consolidated JSON file.")
 
-    # Create a Document instance
-    doc = Document()
+        # Split the data into chunks for summarization
+        chunk_size = 50
+        chunks = [df['Analysis'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
+        app.logger.info(f"Data split into {len(chunks)} chunks.")
 
-    # Add the final summary to the document
-    doc.add_paragraph(final_summary)
+        # Summarize each chunk, but first check if the summary for that chunk already exists
+        summaries = []
+        for i, chunk in enumerate(chunks):
+            summary_blob_name = f"Summary_Chunk_{i}.txt"
+            summary_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", summary_blob_name)
+            
+            if summary_blob_client.exists():
+                # Fetch the existing summary for this chunk
+                app.logger.info(f"Fetching the existing summary for chunk {i}.")
+                download_stream = summary_blob_client.download_blob()
+                summary = download_stream.readall().decode('utf-8')
+            else:
+                # Summarize the chunk and store the summary
+                app.logger.info(f"Summarizing chunk {i}.")
+                summary = summarize_chunk(chunk)
+                summary_blob_client.upload_blob(summary, overwrite=True)
+            
+            summaries.append(summary)
+        
+        # Combine the individual summaries to get a final summary
+        final_summary = " ".join(summaries)
+        app.logger.info("Combined individual summaries into a final summary.")
 
-    # Save the document to a .docx file
-    doc.save('/tmp/Summary.docx')
+        # Summarize the final summary to get a more concise version
+        app.logger.info("Generating a summarized version of the final summary.")
+        summarized_final_summary = summarize_chunk(final_summary)
 
-    # Create a BlobClient instance
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Summary.docx")
+        # Create a Document instance
+        doc = Document()
 
-    # Upload the .docx file to the blob
-    with open('/tmp/Summary.docx', 'rb') as data:
-        blob_client.upload_blob(data, overwrite=True)
+        # Add the summarized final summary to the document
+        doc.add_paragraph(summarized_final_summary)
 
-    return jsonify({'message': 'Summary created and saved successfully'}), 200
+        # Save the document to a .docx file
+        doc_path = '/tmp/Final_Summary.docx'
+        doc.save(doc_path)
+        app.logger.info(f"Saved the summarized final summary to {doc_path}.")
+
+        # Create a BlobClient instance
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Final_Summary.docx")
+
+        # Upload the .docx file to the blob
+        with open(doc_path, 'rb') as data:
+            blob_client.upload_blob(data, overwrite=True)
+        app.logger.info("Uploaded the summarized final summary to Azure Blob Storage.")
+
+        return jsonify({'message': 'Final summary created and saved successfully'}), 200
+    except Exception as e:
+        app.logger.error(f"Error in /summarize route: {e}")
+        return jsonify({'error': 'An error occurred while summarizing the data.'}), 500
 
 
 FLAG_TRIGGER_PROCESS = True  # Set this flag to True to trigger /process
