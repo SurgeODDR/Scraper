@@ -120,6 +120,7 @@ def consolidate_data():
     consolidated_blob_client.upload_blob(df_consolidated.to_json(orient='records'), overwrite=True)
 
     return jsonify({'message': 'Data consolidated successfully'}), 200
+    
 def aggregate_analysis(chunk_text):
     """Aggregates and summarizes a chunk of text using OpenAI and past analyses."""
     
@@ -128,28 +129,30 @@ def aggregate_analysis(chunk_text):
     if os.path.exists(aggregate_path):
         with open(aggregate_path, 'r') as file:
             aggregate_text = file.read()
-    else:
-        aggregate_text = ""  # Initialize an empty string if the file doesn't exist
-        logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
+else:
+    aggregate_text = ""  # Initialize an empty string if the file doesn't exist
+    logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
     
-    headers = {
-        "Authorization": f"Bearer {openai.api_key}"
-    }
+headers = {
+    "Authorization": f"Bearer {openai.api_key}"
+}
+
+# Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
+data = {
+    "model": "gpt-3.5-turbo-16k",
+    "messages": [
+        {"role": "system", "content": """
+You are tasked with the responsibility of updating an ongoing aggregate analysis of the Panama Papers scandal based on new summarized data chunks. Your goal is to read the current aggregate analysis and then integrate the provided new summary into it. Ensure that the updated analysis seamlessly integrates the new data, remains comprehensive, and adheres to a structured narrative. Remember, the objective is to build upon the existing aggregate analysis without redundancy, ensuring that the overall analysis remains cohesive.
+""" },
+        {"role": "user", "content": aggregate_text + "\n\nNew Summary:\n" + summary_chunk}
+    ],
+    "temperature": 0.3,
+    "max_tokens": 12000
+}
     
-    # Send both the chunk and the aggregate text to the model
-    data = {
-        "model": "gpt-3.5-turbo-16k",
-        "messages": [
-            {"role": "system", "content": "You are a research assistant working on a thesis that focuses on quantifying sentiment and emotion analysis related to major events, particularly the Panama Papers scandal. When summarizing the following analysis results, it's essential to include specific quantified data, percentages, and figures. Provide a detailed summary that highlights and quantifies the distribution of sentiments, key emotions, mentions of inequality, perceptions of corruption, and any references to well-known figures. Make sure the summary is concise yet comprehensive, adhering to academic standards."},
-            {"role": "user", "content": aggregate_text + "\n" + chunk_text}
-        ],
-        "temperature": 0.3,
-        "max_tokens": 12000
-    }
-    
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-    response_data = response.json()
-    
+response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+response_data = response.json()
+
     if 'choices' in response_data:
         analysis = response_data['choices'][0]['message']['content'].strip()
         
@@ -177,7 +180,26 @@ def summarize_chunk(chunk_text):
         "messages": [
             {
                 "role": "system",
-                "content": f"You are a research assistant working on a thesis that focuses on quantifying sentiment and emotion analysis related to major events, particularly the Panama Papers scandal. You are analyzing a set of {tweet_count} tweets. When summarizing the following analysis results, it's essential to include specific quantified data, percentages, and figures. Provide a detailed summary that highlights and quantifies the distribution of sentiments, key emotions, mentions of inequality, perceptions of corruption, and any references to well-known figures. Make sure the summary is concise yet comprehensive, adhering to academic standards."
+                "content": f""""
+You are analyzing a set of {tweet_count} tweets. Provide a quantitative summary in CSV format. The summary should contain:
+- How many Tweets are in this dataset
+- Distribution of sentiments (Positive, Negative, Neutral) with percentages.
+- Distribution of key emotions (Anger, Distrust, Skepticism, Outrage/Indignation) with percentages.
+- Total mentions of keywords related to inequality and corruption, and their associated sentiment percentages.
+- Count of references to well-known figures, the figures mentioned, and their associated sentiment percentages.
+
+Structure the CSV output as follows:
+"Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
+"Sentiments, x%, y%, z%, Total"
+"Emotions: Anger, a%, -, -, Total"
+"Emotions: Distrust, b%, -, -, Total"
+...
+"Keywords: Inequality, -, p%, -, Total"
+"Keywords: Corruption, -, q%, -, Total"
+...
+"Figure: [Name], r%, s%, t%, Total"
+...
+"""
             },
             {"role": "user", "content": chunk_text}
         ],
