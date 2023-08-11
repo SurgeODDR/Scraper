@@ -90,23 +90,23 @@ def analyze_text(text):
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
-    # Save the new analysis as new_analysis.csv
-    save_to_blob(blob_service_client, new_analysis, "new_analysis.csv")
-
-    # Load new_analysis.csv into a dataframe
     new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
 
-    # Fetch and load db_analysis.csv into a dataframe, if it exists
+    # Standardize the index labels (remove counts)
+    new_df.index = new_df.index.str.split(',').str[0]
+
     db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
     if db_analysis_blob_client.exists():
         existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
         existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
-        # Sum values based on the category
+        
+        # Standardize the index labels of the existing df
+        existing_df.index = existing_df.index.str.split(',').str[0]
+
         combined_df = new_df.add(existing_df, fill_value=0)
     else:
         combined_df = new_df
 
-    # Save the combined dataframe to db_analysis.csv
     combined_csv_content = combined_df.to_csv()
     save_to_blob(blob_service_client, combined_csv_content, "db_analysis.csv")
 
