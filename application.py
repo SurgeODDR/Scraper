@@ -232,7 +232,7 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
         new_analysis_content = new_analysis_blob_client.download_blob().readall().decode('utf-8')
     except Exception as e:
         app.logger.error(f"Error fetching new analysis content: {e}")
-        return
+        return jsonify({'message': 'Error fetching new analysis content'}), 500
 
     data = {
         "model": "gpt-3.5-turbo-16k",
