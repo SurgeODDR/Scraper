@@ -120,52 +120,6 @@ def consolidate_data():
     consolidated_blob_client.upload_blob(df_consolidated.to_json(orient='records'), overwrite=True)
 
     return jsonify({'message': 'Data consolidated successfully'}), 200
-    
-def aggregate_analysis(chunk_text):
-    """Aggregates and summarizes a chunk of text using OpenAI and past analyses."""
-    
-    # Check if the aggregate_analysis.txt file exists
-    aggregate_path = "/tmp/aggregate_analysis.txt"
-    if os.path.exists(aggregate_path):
-        with open(aggregate_path, 'r') as file:
-            aggregate_text = file.read()
-    else:
-        aggregate_text = ""  # Initialize an empty string if the file doesn't exist
-        logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
-    
-    headers = {
-        "Authorization": f"Bearer {openai.api_key}"
-    }
-
-# Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
-data = {
-    "model": "gpt-3.5-turbo-16k",
-    "messages": [
-        {"role": "system", "content": """
-You are tasked with the responsibility of updating an ongoing aggregate analysis of the Panama Papers scandal based on new summarized data chunks. Your goal is to read the current aggregate analysis and then integrate the provided new summary into it. Ensure that the updated analysis seamlessly integrates the new data, remains comprehensive, and adheres to a structured narrative. Remember, the objective is to build upon the existing aggregate analysis without redundancy, ensuring that the overall analysis remains cohesive.
-""" },
-        {"role": "user", "content": aggregate_text + "\n\nNew Summary:\n" + summary_chunk}
-    ],
-    "temperature": 0.3,
-    "max_tokens": 12000
-}
-    
-response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-response_data = response.json()
-
-    if 'choices' in response_data:
-        analysis = response_data['choices'][0]['message']['content'].strip()
-        
-        # Append the new analysis to the aggregate_analysis.txt
-        with open(aggregate_path, 'a') as file:
-            file.write("\n\nChunk Analysis:\n" + chunk_text + "\n\nSummary:\n" + analysis)
-        logging.info(f"Appended to {aggregate_path} successfully")
-        return analysis
-    else:
-        error_message = f"Unexpected response from OpenAI: {response_data}"
-        app.logger.error(error_message)
-        logging.error(error_message)
-        return "Error summarizing the data."
         
 def summarize_chunk(chunk_text):
     """Summarizes a chunk of text using OpenAI."""
@@ -186,7 +140,6 @@ You are analyzing a set of {tweet_count} tweets. Provide a quantitative summary 
 - Distribution of sentiments (Positive, Negative, Neutral) with percentages.
 - Distribution of key emotions (Anger, Distrust, Skepticism, Outrage/Indignation) with percentages.
 - Total mentions of keywords related to inequality and corruption, and their associated sentiment percentages.
-- Count of references to well-known figures, the figures mentioned, and their associated sentiment percentages.
 
 Structure the CSV output as follows:
 "Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
@@ -196,8 +149,6 @@ Structure the CSV output as follows:
 ...
 "Keywords: Inequality, -, p%, -, Total"
 "Keywords: Corruption, -, q%, -, Total"
-...
-"Figure: [Name], r%, s%, t%, Total"
 ...
 """
             },
@@ -216,11 +167,17 @@ Structure the CSV output as follows:
         app.logger.error(f"Unexpected response from OpenAI: {response_data}")
         return "Error summarizing the data."
         
+import time
+
 def update_aggregate_analysis(summary_chunk):
     """Updates the aggregate_analysis.txt with the summary_chunk and uploads it to Azure Blob Storage."""
-    
+
     aggregate_path = "/tmp/aggregate_analysis.txt"
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+    
+    # Default values
+    aggregate_text = ""
+    iteration = 1
     
     # Check if the aggregate_analysis.txt file exists in Blob Storage
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "aggregate_analysis.txt")
@@ -231,19 +188,20 @@ def update_aggregate_analysis(summary_chunk):
             file.write(download_stream.readall())
         with open(aggregate_path, 'r') as file:
             aggregate_text = file.read()
-    else:
-        aggregate_text = ""
-        logging.info("aggregate_analysis.txt does not exist in Blob Storage. Initializing an empty string for aggregate_text.")
+            # Extract the last iteration number from the aggregate text
+            last_line = aggregate_text.strip().split('\n')[-1]
+            if "Iteration" in last_line:
+                iteration = int(last_line.split(" ")[1].replace(":", "")) + 1
     
     headers = {
         "Authorization": f"Bearer {openai.api_key}"
     }
-    
-    # Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
+
+    # Modify the prompt for academic robustness
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": "You are tasked with updating the aggregate analysis with the new summary provided. Integrate the new summary into the existing aggregate analysis in a way that maintains a cohesive and comprehensive narrative."},
+            {"role": "system", "content": "You are tasked with updating the aggregate analysis with the new summary provided. Ensure the update adheres to academic standards. Integrate the new summary into the existing aggregate analysis in a way that maintains a cohesive, comprehensive, and academically robust narrative."},
             {"role": "user", "content": aggregate_text + "\n\n" + summary_chunk}
         ],
         "temperature": 0.3,
@@ -256,10 +214,12 @@ def update_aggregate_analysis(summary_chunk):
     if 'choices' in response_data:
         updated_text = response_data['choices'][0]['message']['content'].strip()
         
+        # Append the iteration number and timestamp to the updated text
+        updated_text += f"\n\n---\nIteration: {iteration} | Updated on: {time.strftime('%Y-%m-%d %H:%M:%S')}"
+
         # Write the updated text to the aggregate_analysis.txt
         with open(aggregate_path, 'w') as file:
             file.write(updated_text)
-        logging.info(f"Updated {aggregate_path} successfully")
 
         # Upload the updated aggregate_analysis.txt to Azure Blob Storage
         with open(aggregate_path, 'rb') as data:
