@@ -50,6 +50,7 @@ Structure the CSV output as follows:
 ...
 "Keywords: Inequality, -, [Negative Percentage], -, [Total Inequality Mentions]"
 "Keywords: Corruption, -, [Negative Percentage], -, [Total Corruption Mentions]"
+...
 """
             },
             {"role": "user", "content": text}
