@@ -186,6 +186,12 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
         last_line = aggregate_content.strip().split('\n')[-1]
         if "Iteration" in last_line:
             iteration = int(last_line.split(" ")[1].replace(":", "")) + 1
+    else:
+        # If aggregate_analysis.txt does not exist, create it with the content of now_aggregate_analysis.txt
+        now_aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "now_aggregate_analysis.txt")
+        if now_aggregate_blob_client.exists():
+            now_aggregate_content = now_aggregate_blob_client.download_blob().readall()
+            aggregate_blob_client.upload_blob(now_aggregate_content, overwrite=True)
 
     new_analysis_content = new_analysis_blob_client.download_blob().readall().decode('utf-8')
     
