@@ -20,16 +20,23 @@ openai.api_key = secret_client.get_secret("openai-api-key").value
 # Rate limiter for the first OpenAI API key
 rate_limiter = RateLimiter(max_calls=3500, period=60)
 
-# Fetch the second OpenAI API key and create its rate limiter
-openai_api_key2 = secret_client.get_secret("openai-api-key2").value
-rate_limiter2 = RateLimiter(max_calls=3500, period=60)
+import time
 
-def openai_request(data, api_key, rate_limiter_obj):
+def openai_request(data, api_key, rate_limiter_obj, retries=3, delay=5):
     headers = {"Authorization": f"Bearer {api_key}"}
-    with rate_limiter_obj:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-        response.raise_for_status()
-        return response.json()
+    
+    for _ in range(retries):
+        with rate_limiter_obj:
+            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+            if response.status_code == 429:  # Rate Limit Exceeded
+                app.logger.warning("Rate limit exceeded. Retrying in {} seconds...".format(delay))
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            return response.json()
+    app.logger.error("Failed to make a successful request after {} retries.".format(retries))
+    return {}  # Return an empty dictionary to indicate failure
+
 
 def save_to_blob(blob_service_client, content, file_name):
     path = f"/tmp/{file_name}"
