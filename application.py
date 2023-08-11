@@ -159,7 +159,7 @@ def compare_files(blob_service_client):
     }
 
     response = openai_request(data, openai_api_key2, rate_limiter2)  # Use the second API key and its rate limiter
-    response_data = response.json()
+    response_data = response
 
     if 'choices' in response and response['choices'][0]['message']['content'].strip() == "YES":
         return True
