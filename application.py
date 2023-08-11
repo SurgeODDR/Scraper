@@ -146,25 +146,25 @@ def compare_files(blob_service_client):
     now_aggregate_content = now_aggregate_blob_client.download_blob().readall().decode('utf-8')
 
     headers = {"Authorization": f"Bearer {openai_api_key2}"}
-data = {
-    "model": "gpt-3.5-turbo-16k",
-    "messages": [
-        {
-            "role": "system",
-            "content": """
-Please compare each corresponding value in 'now_aggregate_analysis.txt' against 'aggregate_analysis.txt'. For every category and sub-category, ensure that the value in 'now_aggregate_analysis.txt' is either the same or larger than the corresponding value in 'aggregate_analysis.txt'. Respond with 'YES' if all values in 'now_aggregate_analysis.txt' meet this criterion, otherwise respond with 'NO'.
-Example:
-"Sentiments, 50%, 30%, 20%, 100" in 'aggregate_analysis.txt' should be compared with "Sentiments, 55%, 28%, 17%, 105" in 'now_aggregate_analysis.txt'. The latter has higher or equal values for all categories.
-"""
-        },
-        {
-            "role": "user",
-            "content": f"Old Aggregate Analysis:\n{aggregate_content}\n\nNew Aggregate Analysis:\n{now_aggregate_content}"
-        }
-    ],
-    "temperature": 0.3,
-    "max_tokens": 12000
-}
+    data = {
+        "model": "gpt-3.5-turbo-16k",
+        "messages": [
+            {
+                "role": "system",
+                "content": """
+    Please compare each corresponding value in 'now_aggregate_analysis.txt' against 'aggregate_analysis.txt'. For every category and sub-category, ensure that the value in 'now_aggregate_analysis.txt' is either the same or larger than the corresponding value in 'aggregate_analysis.txt'. Respond with 'YES' if all values in 'now_aggregate_analysis.txt' meet this criterion, otherwise respond with 'NO'.
+    Example:
+    "Sentiments, 50%, 30%, 20%, 100" in 'aggregate_analysis.txt' should be compared with "Sentiments, 55%, 28%, 17%, 105" in 'now_aggregate_analysis.txt'. The latter has higher or equal values for all categories.
+    """
+            },
+            {
+                "role": "user",
+                "content": f"Old Aggregate Analysis:\n{aggregate_content}\n\nNew Aggregate Analysis:\n{now_aggregate_content}"
+            }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 12000
+    }
 
 
     response = openai_request(data, openai_api_key2, rate_limiter2)  # Use the second API key and its rate limiter
