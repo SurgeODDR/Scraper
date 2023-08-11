@@ -57,7 +57,20 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-        Generate a quantitative analysis in CSV format based on the provided text.
+        Generate a quantitative analysis in CSV format based on the provided text. Cover:
+        - Sentiments (Positive, Negative, Neutral)
+        - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
+        - Keywords related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
+        
+        CSV Structure:
+        "Category, Total Mentions"
+        "Sentiments: Positive, [Total Positive Sentiment Mentions]"
+        "Sentiments: Negative, [Total Negative Sentiment Mentions]"
+        "Sentiments: Neutral, [Total Neutral Sentiment Mentions]"
+        "Emotions: Happiness, [Total Happiness Mentions]"
+        ...
+        "Keywords: Inequality, [Total Inequality Mentions]"
+        ...
         """
             },
             {"role": "user", "content": text}
@@ -65,7 +78,7 @@ def analyze_text(text):
         "temperature": 0.3,
         "max_tokens": 12000
     }
-
+    
     response_data = openai_request(data, openai.api_key, rate_limiter)
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
 
