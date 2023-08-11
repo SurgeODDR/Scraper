@@ -57,25 +57,28 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-    Generate a quantitative analysis in CSV format based on the provided text. Cover:
-    - Sentiments (Positive, Negative, Neutral)
-    - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
-    - Keywords related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
-    
-    CSV Structure:
-    "Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
-    "Sentiments, [Positive Percentage], [Negative Percentage], [Neutral Percentage], [Total Sentiment Mentions]"
-    "Emotions: Happiness, [Positive Percentage], -, -, [Total Happiness Mentions]"
-    ...
-    "Keywords: Inequality, -, [Negative Percentage], -, [Total Inequality Mentions]"
-    ...
-    """
+        Generate a quantitative analysis in CSV format based on the provided text. Cover:
+        - Sentiments (Positive, Negative, Neutral)
+        - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
+        - Keywords related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
+        
+        CSV Structure:
+        "Category, Total Mentions"
+        "Sentiments: Positive, [Total Positive Sentiment Mentions]"
+        "Sentiments: Negative, [Total Negative Sentiment Mentions]"
+        "Sentiments: Neutral, [Total Neutral Sentiment Mentions]"
+        "Emotions: Happiness, [Total Happiness Mentions]"
+        ...
+        "Keywords: Inequality, [Total Inequality Mentions]"
+        ...
+        """
             },
             {"role": "user", "content": text}
         ],
         "temperature": 0.3,
         "max_tokens": 12000
     }
+
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
 
@@ -152,24 +155,24 @@ def compare_files(blob_service_client):
             {
                 "role": "system",
                 "content": """
-        You will be given two sets of data in CSV format: one from 'aggregate_analysis.txt' and another from 'now_aggregate_analysis.txt'. Your task is to:
-        1. Parse each line of the CSV to identify the category and the 'Total Mentions' value.
-        2. For every category and sub-category, compare the 'Total Mentions' value from 'now_aggregate_analysis.txt' to that in 'aggregate_analysis.txt'.
-        3. Ensure that each 'Total Mentions' value in 'now_aggregate_analysis.txt' is either the same or larger than the corresponding value in 'aggregate_analysis.txt'.
-        4. If all 'Total Mentions' values from 'now_aggregate_analysis.txt' meet this criterion, respond with 'YES'. Otherwise, respond with 'NO'.
-        
-        Here's an example for clarity:
-        If 'aggregate_analysis.txt' has "Sentiments, ..., ..., ..., 100" and 'now_aggregate_analysis.txt' has "Sentiments, ..., ..., ..., 105", then the values in the latter are acceptable since the 'Total Mentions' in the latter is higher or equal.
-        """
+                Your task is to merge an existing aggregate analysis dataset with a new analysis. Specifically:
+                1. Identify matching categories and sub-categories between the two CSV datasets.
+                2. For each matching category and sub-category, sum the "Total Mentions" from both datasets.
+                3. If there are any categories or sub-categories present in the new analysis that aren't in the existing aggregate, append them to the dataset.
+                4. Ensure there's no duplication in the final dataset.
+                5. Present the merged data in CSV format, ensuring accuracy in the summation.
+                """
             },
             {
                 "role": "user",
-                "content": f"Old Aggregate Analysis:\n{aggregate_content}\n\nNew Aggregate Analysis:\n{now_aggregate_content}"
+                "content": f"Existing Aggregate Analysis:\n{aggregate_content}\n\nNew Analysis:\n{new_analysis_content}"
             }
         ],
         "temperature": 0.3,
         "max_tokens": 12000
     }
+
+
 
     response = openai_request(data, openai_api_key2, rate_limiter2)  # Use the second API key and its rate limiter
     response_data = response
