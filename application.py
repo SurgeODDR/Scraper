@@ -104,7 +104,8 @@ def process_data():
         last_tweet_id_in_chunk = chunk_df.iloc[-1]['id']
         set_last_processed_tweet_id(blob_service_client, last_tweet_id_in_chunk)
 
-        # Your existing code for the analysis
+        # Here's where you should update the aggregate analysis
+        update_aggregate_analysis(analysis, len(chunk_df))
 
     return jsonify({'message': 'Data processed and aggregate analysis updated successfully'}), 200
 
