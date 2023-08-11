@@ -7,7 +7,6 @@ from azure.keyvault.secrets import SecretClient
 from azure.storage.blob import BlobServiceClient
 import io
 import logging
-import time
 from ratelimiter import RateLimiter
 
 app = Flask(__name__)
@@ -17,14 +16,27 @@ credential = DefaultAzureCredential()
 key_vault_uri = "https://Keyvaultxscrapingoddr.vault.azure.net/"
 secret_client = SecretClient(vault_url=key_vault_uri, credential=credential)
 openai.api_key = secret_client.get_secret("openai-api-key").value
+
+# Rate limiter for the first OpenAI API key
 rate_limiter = RateLimiter(max_calls=3500, period=60)
 
-def openai_request(data, api_key, rate_limiter_obj):
+import time
+
+def openai_request(data, api_key, rate_limiter_obj, retries=3, delay=5):
     headers = {"Authorization": f"Bearer {api_key}"}
-    with rate_limiter_obj:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-        response.raise_for_status()
-        return response.json()
+    
+    for _ in range(retries):
+        with rate_limiter_obj:
+            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+            if response.status_code == 429:  # Rate Limit Exceeded
+                app.logger.warning("Rate limit exceeded. Retrying in {} seconds...".format(delay))
+                time.sleep(delay)
+                continue
+            response.raise_for_status()
+            return response.json()
+    app.logger.error("Failed to make a successful request after {} retries.".format(retries))
+    return {}  # Return an empty dictionary to indicate failure
+
 
 def save_to_blob(blob_service_client, content, file_name):
     path = f"/tmp/{file_name}"
@@ -73,51 +85,30 @@ def analyze_text(text):
         "temperature": 0.3,
         "max_tokens": 12000
     }
-
-    response_data = openai_request(data, openai.api_key, rate_limiter)
-    analysis_content = response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
     
-    try:
-        df = pd.read_csv(io.StringIO(analysis_content), index_col=0)
-        category_counts = df.to_dict()["Total Mentions"]
-    except KeyError:
-        app.logger.error(f"Unexpected structure in response for text: {text[:100]}...")  # Log first 100 chars for reference
-        app.logger.error(analysis_content)  # Log the actual content for debugging
-        category_counts = {}  # Set it to an empty dictionary to avoid further issues
-
-    return analysis_content, category_counts
+    response_data = openai_request(data, openai.api_key, rate_limiter)
+    return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
+    # Save the new analysis as new_analysis.csv
+    save_to_blob(blob_service_client, new_analysis, "new_analysis.csv")
+
+    # Load new_analysis.csv into a dataframe
     new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
+
+    # Fetch and load db_analysis.csv into a dataframe, if it exists
     db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
     if db_analysis_blob_client.exists():
         existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
         existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
+        # Sum values based on the category
         combined_df = new_df.add(existing_df, fill_value=0)
     else:
         combined_df = new_df
+
+    # Save the combined dataframe to db_analysis.csv
     combined_csv_content = combined_df.to_csv()
     save_to_blob(blob_service_client, combined_csv_content, "db_analysis.csv")
-
-def update_audit_log(blob_service_client, num_tweets, start_id, end_id, mentions_details):
-    current_time = time.strftime('%Y-%m-%d %H:%M:%S')
-    new_log = f"{current_time},{num_tweets},{start_id},{end_id},{mentions_details}\n"
-    
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "audit.csv")
-    if blob_client.exists():
-        app.logger.info("audit.csv exists. Fetching its content.")
-        current_content = blob_client.download_blob().readall().decode('utf-8')
-        updated_content = current_content + new_log
-    else:
-        app.logger.info("audit.csv doesn't exist. Creating a new one.")
-        header = "Timestamp,NumOfTweets,StartTweetID,EndTweetID,MentionsDetails\n"
-        updated_content = header + new_log
-        blob_client.upload_blob(header)  # Explicitly creating the file with the header.
-        time.sleep(2)  # Small delay to ensure the file is created before appending.
-
-    app.logger.info("Saving updated content to audit.csv.")
-    save_to_blob(blob_service_client, updated_content, "audit.csv")
-    time.sleep(2)  # Small delay to ensure no overlapping writes.
 
 @app.route('/process', methods=['GET'])
 def process_data():
@@ -127,26 +118,24 @@ def process_data():
     data = download_stream.readall()
     df = pd.read_json(io.BytesIO(data))
     
+    # Get the list of tweet IDs that have been processed already
     processed_ids = get_processed_tweet_ids(blob_service_client)
+
+    # Filter out tweets that have been processed
     df = df[~df['id'].isin(processed_ids)]
     
-    chunk_size = 5
+    # Splitting data into chunks
+    chunk_size = 5  # Adjust as needed
     chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
-
+    
+    # Processing each chunk and updating db_analysis.csv
     for chunk_df in chunks:
         chunk_text = chunk_df['text'].str.cat(sep='\n')
-        new_analysis, category_counts = analyze_text(chunk_text)
+        new_analysis = analyze_text(chunk_text)
         combine_and_save_analysis(blob_service_client, new_analysis)
-        
+
+        # Update the list of processed tweets
         processed_ids.update(chunk_df['id'].tolist())
         update_processed_tweet_ids(blob_service_client, processed_ids)
-        
-        mentions_details = "; ".join([f"{key}: {value}" for key, value in category_counts.items()])
-        start_id = chunk_df['id'].iloc[0]
-        end_id = chunk_df['id'].iloc[-1]
-        update_audit_log(blob_service_client, len(chunk_df), start_id, end_id, mentions_details)
 
     return jsonify({'message': 'Data processed successfully'}), 200
-
-if __name__ == "__main__":
-    app.run(debug=True)
