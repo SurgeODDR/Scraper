@@ -152,10 +152,15 @@ def compare_files(blob_service_client):
             {
                 "role": "system",
                 "content": """
-    Please compare each corresponding value in 'now_aggregate_analysis.txt' against 'aggregate_analysis.txt'. For every category and sub-category, ensure that the value in 'now_aggregate_analysis.txt' is either the same or larger than the corresponding value in 'aggregate_analysis.txt'. Respond with 'YES' if all values in 'now_aggregate_analysis.txt' meet this criterion, otherwise respond with 'NO'.
-    Example:
-    "Sentiments, 50%, 30%, 20%, 100" in 'aggregate_analysis.txt' should be compared with "Sentiments, 55%, 28%, 17%, 105" in 'now_aggregate_analysis.txt'. The latter has higher or equal values for all categories.
-    """
+        You will be given two sets of data in CSV format: one from 'aggregate_analysis.txt' and another from 'now_aggregate_analysis.txt'. Your task is to:
+        1. Parse each line of the CSV to identify the category and the 'Total Mentions' value.
+        2. For every category and sub-category, compare the 'Total Mentions' value from 'now_aggregate_analysis.txt' to that in 'aggregate_analysis.txt'.
+        3. Ensure that each 'Total Mentions' value in 'now_aggregate_analysis.txt' is either the same or larger than the corresponding value in 'aggregate_analysis.txt'.
+        4. If all 'Total Mentions' values from 'now_aggregate_analysis.txt' meet this criterion, respond with 'YES'. Otherwise, respond with 'NO'.
+        
+        Here's an example for clarity:
+        If 'aggregate_analysis.txt' has "Sentiments, ..., ..., ..., 100" and 'now_aggregate_analysis.txt' has "Sentiments, ..., ..., ..., 105", then the values in the latter are acceptable since the 'Total Mentions' in the latter is higher or equal.
+        """
             },
             {
                 "role": "user",
@@ -165,7 +170,6 @@ def compare_files(blob_service_client):
         "temperature": 0.3,
         "max_tokens": 12000
     }
-
 
     response = openai_request(data, openai_api_key2, rate_limiter2)  # Use the second API key and its rate limiter
     response_data = response
