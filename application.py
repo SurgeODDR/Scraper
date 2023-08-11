@@ -195,11 +195,12 @@ def get_processed_tweet_ids(blob_service_client):
     return set()
 
 def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
-    app.logger.info("Updating aggregate analysis...")
+    app.logger.info("Starting aggregate analysis update...")
 
     try:
         # Save the new analysis to new_analysis.txt
         save_new_analysis(blob_service_client, analysis)
+        app.logger.info("Saved the new analysis to new_analysis.txt successfully.")
     except Exception as e:
         app.logger.error(f"Failed to save new analysis: {e}")
         return
@@ -218,21 +219,27 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
             last_line = aggregate_content.strip().split('\n')[-1]
             if "Iteration" in last_line:
                 iteration = int(last_line.split(" ")[1].replace(":", "")) + 1
+            app.logger.info(f"Got existing aggregate analysis. Iteration: {iteration}")
         else:
+            app.logger.info("aggregate_analysis.txt does not exist. Checking now_aggregate_analysis.txt...")
             # If aggregate_analysis.txt does not exist, create it with the content of now_aggregate_analysis.txt
             now_aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "now_aggregate_analysis.txt")
             if now_aggregate_blob_client.exists():
                 now_aggregate_content = now_aggregate_blob_client.download_blob().readall()
                 aggregate_blob_client.upload_blob(now_aggregate_content, overwrite=True)
+                app.logger.info("Created aggregate_analysis.txt from now_aggregate_analysis.txt content.")
     except Exception as e:
         app.logger.error(f"Error handling aggregate_analysis.txt: {e}")
         return
 
     try:
         new_analysis_content = new_analysis_blob_client.download_blob().readall().decode('utf-8')
+        app.logger.info("Fetched new analysis content successfully.")
     except Exception as e:
         app.logger.error(f"Error fetching new analysis content: {e}")
-        return jsonify({'message': 'Error fetching new analysis content'}), 500
+        return
+    
+    app.logger.info(f"Content of new_analysis_content before usage: {new_analysis_content}")
 
     data = {
         "model": "gpt-3.5-turbo-16k",
@@ -259,6 +266,7 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
 
     try:
         response_data = openai_request(data, openai.api_key, rate_limiter)
+        app.logger.info("Received response from OpenAI request.")
     except Exception as e:
         app.logger.error(f"Error during OpenAI request: {e}")
         return
@@ -273,6 +281,7 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
             now_aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "now_aggregate_analysis.txt")
             with open(now_aggregate_path, 'rb') as data:
                 now_aggregate_blob_client.upload_blob(data, overwrite=True)
+            app.logger.info("Updated now_aggregate_analysis.txt successfully.")
 
             is_valid = compare_files(blob_service_client)
             if is_valid:
@@ -283,6 +292,7 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
                 app.logger.info("The new aggregate analysis did not have bigger or the same values as the previous one.")
     except Exception as e:
         app.logger.error(f"Error updating aggregate analysis: {e}")
+
 
 FLAG_TRIGGER_PROCESS = True
 
