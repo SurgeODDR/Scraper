@@ -227,17 +227,26 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": """
-        Merge the provided existing aggregate analysis with the new analysis into a single cohesive dataset. For each category and sub-category in the CSV format, sum the corresponding values from the new analysis to the existing aggregate analysis. Ensure accuracy in the summation and present the merged data in CSV format without duplication.
+            {
+                "role": "system",
+                "content": """
+        Your task is to augment an existing aggregate analysis dataset by adding values from a new analysis. Specifically:
+        1. Identify matching categories and sub-categories between the two CSV datasets.
+        2. For each matching category and sub-category, sum the numerical values from the new analysis to those in the existing aggregate.
+        3. If there are any categories or sub-categories present in the new analysis that aren't in the existing aggregate, append them to the dataset.
+        4. Ensure there's no duplication in the final dataset.
+        5. Present the merged data in CSV format, ensuring accuracy in the summation.
         """
             },
-            {"role": "user", "content": f"Existing Aggregate Analysis:\n{aggregate_content}\n\nNew Analysis:\n{new_analysis_content}"}
+            {
+                "role": "user",
+                "content": f"Existing Aggregate Analysis:\n{aggregate_content}\n\nNew Analysis:\n{new_analysis_content}"
+            }
         ],
         "temperature": 0.3,
         "max_tokens": 12000
     }
 
-    
     try:
         response_data = openai_request(data, openai.api_key, rate_limiter)
     except Exception as e:
