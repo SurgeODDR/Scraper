@@ -158,6 +158,17 @@ def compare_files(blob_service_client):
         return True
     print("now_aggregate_analysis.txt does NOT have bigger or the same values as aggregate_analysis.txt")
     return False
+    
+def get_processed_tweet_ids(blob_service_client):
+    """Fetch the list of tweet IDs that have been processed."""
+    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "processed_tweet_ids.txt")
+    
+    if blob_client.exists():
+        download_stream = blob_client.download_blob()
+        processed_ids = set(map(int, download_stream.readall().decode('utf-8').splitlines()))
+        return processed_ids
+    
+    return set()
 
 def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
     print("Updating aggregate analysis...")
