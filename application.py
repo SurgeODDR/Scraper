@@ -6,14 +6,12 @@ from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from azure.storage.blob import BlobServiceClient
 import io
-import sys
 import logging
 import time
 from ratelimiter import RateLimiter
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 credential = DefaultAzureCredential()
 key_vault_uri = "https://Keyvaultxscrapingoddr.vault.azure.net/"
@@ -81,20 +79,13 @@ Structure the CSV output as follows:
         print("Error in OpenAI response.")
         return "Error analyzing the text."
 
-def get_processed_tweet_ids(blob_service_client):
-    """Fetch the IDs of all processed tweets."""
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "processed_tweet_ids.txt")
-    if blob_client.exists():
-        download_stream = blob_client.download_blob()
-        processed_ids = set(map(int, download_stream.readall().decode('utf-8').splitlines()))
-        return processed_ids
-    return set()
-
 def update_processed_tweet_ids(blob_service_client, processed_ids):
     """Update the blob with new processed tweet IDs."""
+    logging.info("Starting update of processed tweet IDs...")
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "processed_tweet_ids.txt")
     ids_str = "\n".join(map(str, processed_ids))
     blob_client.upload_blob(ids_str, overwrite=True)
+    logging.info(f"Successfully updated processed_tweet_ids.txt with {len(processed_ids)} IDs")
 
 @app.route('/process', methods=['GET'])
 def process_data():
@@ -131,6 +122,7 @@ def process_data():
     return jsonify({'message': 'Data processed successfully'}), 200
     
 def compare_files(blob_service_client):
+    print("Comparing aggregate analysis files...")
     aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "aggregate_analysis.txt")
     now_aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "now_aggregate_analysis.txt")
 
@@ -162,7 +154,9 @@ def compare_files(blob_service_client):
     response_data = response
 
     if 'choices' in response and response['choices'][0]['message']['content'].strip() == "YES":
+        print("now_aggregate_analysis.txt has bigger or the same values as aggregate_analysis.txt")
         return True
+    print("now_aggregate_analysis.txt does NOT have bigger or the same values as aggregate_analysis.txt")
     return False
 
 def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
@@ -223,6 +217,9 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
         if is_valid:
             with open(now_aggregate_path, 'rb') as data:
                 aggregate_blob_client.upload_blob(data, overwrite=True)
+            print("Updated aggregate_analysis.txt successfully")
+        else:
+            print("The new aggregate analysis did not have bigger or the same values as the previous one.")
 
 FLAG_TRIGGER_PROCESS = True
 
