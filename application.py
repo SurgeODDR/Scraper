@@ -165,7 +165,7 @@ Structure the CSV output as follows:
         
 import time
 
-def update_aggregate_analysis(summary_chunk, tweets_processed):
+def update_aggregate_analysis(analysis, tweets_processed):
     """Updates the aggregate_analysis.txt with the summary_chunk and uploads it to Azure Blob Storage."""
 
     aggregate_path = "/tmp/aggregate_analysis.txt"
@@ -197,12 +197,13 @@ def update_aggregate_analysis(summary_chunk, tweets_processed):
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": f"You are tasked with updating the aggregate analysis with the new summary provided. As of now, {tweets_processed} tweets have been analyzed. Ensure the update adheres to academic standards. Integrate the new summary into the existing aggregate analysis in a way that maintains a cohesive, comprehensive, and academically robust narrative."},
-            {"role": "user", "content": aggregate_text + "\n\n" + summary_chunk}
+            {"role": "system", "content": f"You are tasked with intelligently integrating the new analysis data into the existing aggregate analysis. As of now, {tweets_processed} tweets have been analyzed. Ensure that the integration maintains the CSV format, adheres to academic standards, and results in a cohesive, comprehensive, and academically robust narrative. The existing aggregate contains cumulative data, so make sure to account for and combine similar data points where necessary."},
+            {"role": "user", "content": f"Existing Aggregate Analysis:\n{aggregate_text}\n\nNew Analysis:\n{analysis}"}
         ],
         "temperature": 0.3,
         "max_tokens": 12000
     }
+
     
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
     response_data = response.json()
