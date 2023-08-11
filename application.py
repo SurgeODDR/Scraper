@@ -34,7 +34,6 @@ You are analyzing the text provided. Provide a quantitative analysis in CSV form
 - Distribution of sentiments (Positive, Negative, Neutral) with percentages.
 - Distribution of key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment) with percentages.
 - Mentions of keywords related to inequality, unfairness, diminished trust in the government, unjust actions, disloyalty, and perceptions of corruption, and their associated sentiment percentages.
-- Highlight and quantify mentions of well-known figures such as celebrities, politicians, or other public figures and analyze the sentiment and emotional tones associated with these mentions.
 
 Structure the CSV output as follows:
 "Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
@@ -44,8 +43,6 @@ Structure the CSV output as follows:
 ...
 "Keywords: Inequality, -, [Negative Percentage], -, [Total Inequality Mentions]"
 "Keywords: Corruption, -, [Negative Percentage], -, [Total Corruption Mentions]"
-...
-"Public Figures: [Public Figure Name], [Positive Percentage], [Negative Percentage], [Neutral Percentage], [Total Mention of the Figure]"
 """
             },
             {"role": "user", "content": text}
@@ -68,6 +65,21 @@ Structure the CSV output as follows:
         app.logger.error(f"Unexpected response from OpenAI: {response_data}")
         return "Error analyzing the text."
 
+LAST_PROCESSED_ID_BLOB_NAME = "last_processed_id.txt"
+
+def get_last_processed_tweet_id(blob_service_client):
+    """Fetch the last processed tweet ID from Azure Blob Storage."""
+    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", LAST_PROCESSED_ID_BLOB_NAME)
+    if blob_client.exists():
+        download_stream = blob_client.download_blob()
+        return int(download_stream.readall())
+    return None
+
+def set_last_processed_tweet_id(blob_service_client, tweet_id):
+    """Save the last processed tweet ID to Azure Blob Storage."""
+    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", LAST_PROCESSED_ID_BLOB_NAME)
+    blob_client.upload_blob(str(tweet_id), overwrite=True)
+
 @app.route('/process', methods=['GET'])
 def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
@@ -75,20 +87,27 @@ def process_data():
     download_stream = blob_client.download_blob()
     data = download_stream.readall()
     df = pd.read_json(io.BytesIO(data))
-    chunk_size = 5
-    chunks = [df['text'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
-    tweets_processed = 0
 
-    for i, chunk in enumerate(chunks):
-        summary_blob_name = f"Summary_Chunk_{i}.txt"
-        summary_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", summary_blob_name)
+    # Fetch the last processed tweet ID and use it as a starting point
+    last_processed_id = get_last_processed_tweet_id(blob_service_client)
+    if last_processed_id:
+        df = df[df['id'] > last_processed_id]
+
+    chunk_size = 5
+    chunks = [df.iloc[i:i+chunk_size] for i in range(0, len(df), chunk_size)]
+
+    for chunk_df in chunks:
+        chunk_text = chunk_df['text'].str.cat(sep='\n')
+        analysis = analyze_text(chunk_text)
         
-        if not summary_blob_client.exists():
-            analysis = analyze_text(chunk)
-            tweets_processed += len(chunk.split('\n'))
-            update_aggregate_analysis(analysis, tweets_processed)
+        # Save the ID of the last tweet in the chunk to Azure Blob Storage
+        last_tweet_id_in_chunk = chunk_df.iloc[-1]['id']
+        set_last_processed_tweet_id(blob_service_client, last_tweet_id_in_chunk)
+
+        # Your existing code for the analysis
 
     return jsonify({'message': 'Data processed and aggregate analysis updated successfully'}), 200
+
         
 import time
 
@@ -124,13 +143,26 @@ def update_aggregate_analysis(analysis, tweets_processed):
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": f"You are tasked with intelligently integrating the new analysis data into the existing aggregate analysis. As of now, {tweets_processed} tweets have been analyzed. Ensure that the integration maintains the CSV format, adheres to academic standards, and results in a cohesive, comprehensive, and academically robust narrative. The existing aggregate contains cumulative data, so make sure to account for and combine similar data points where necessary."},
-            {"role": "user", "content": f"Existing Aggregate Analysis:\n{aggregate_text}\n\nNew Analysis:\n{analysis}"}
+            {
+                "role": "system",
+                "content": f"""
+    You have two sets of data: an existing aggregate analysis and a new analysis. Your task is to integrate the new analysis into the existing one. Follow these steps:
+    1. Ensure that the integrated data is in CSV format.
+    2. Maintain academic rigor and standards throughout the process.
+    3. Keep the narrative cohesive and comprehensive.
+    4. If there are similar data points between the new analysis and the existing aggregate, combine them accurately without duplication.
+    5. Ensure that the final integrated data is accurate and reflects the true nature of both the existing and new analyses.
+    Remember, the integrity and accuracy of the data are paramount.
+    """
+            },
+            {
+                "role": "user",
+                "content": f"Existing Aggregate Analysis:\n{aggregate_text}\n\nNew Analysis:\n{analysis}"
+            }
         ],
         "temperature": 0.3,
         "max_tokens": 12000
     }
-
     
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
     response_data = response.json()
