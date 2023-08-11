@@ -201,7 +201,7 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
         "max_tokens": 12000
     }
     
-    response_data = openai_request(data)
+    response_data = openai_request(data, openai.api_key, rate_limiter)
     if 'choices' in response_data:
         combined_content = response_data['choices'][0]['message']['content'].strip() + f"\n\n---\nIteration: {iteration} | Updated on: {time.strftime('%Y-%m-%d %H:%M:%S')}"
         now_aggregate_path = "/tmp/now_aggregate_analysis.txt"
