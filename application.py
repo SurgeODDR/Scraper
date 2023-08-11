@@ -167,7 +167,7 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
     aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "aggregate_analysis.txt")
     new_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "new_analysis.txt")
     
-    aggregate_text = ""
+    aggregate_content = ""  # Initialize the variable here
     iteration = 1
     if aggregate_blob_client.exists():
         aggregate_content = aggregate_blob_client.download_blob().readall().decode('utf-8')
