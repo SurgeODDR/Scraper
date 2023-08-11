@@ -124,17 +124,18 @@ def process_data():
     # Filter out tweets that have been processed
     df = df[~df['id'].isin(processed_ids)]
     
-    text = df['text'].str.cat(sep='\n')
-    analysis = analyze_text(text)
+    # Splitting data into chunks
+    chunk_size = 5  # Adjust as needed
+    chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
+    
+    # Processing each chunk and updating db_analysis.csv
+    for chunk_df in chunks:
+        chunk_text = chunk_df['text'].str.cat(sep='\n')
+        new_analysis = analyze_text(chunk_text)
+        combine_and_save_analysis(blob_service_client, new_analysis)
 
-    # Combine the new analysis with existing data and save
-    combine_and_save_analysis(blob_service_client, analysis)
-
-    # Update the list of processed tweets
-    processed_ids.update(df['id'].tolist())
-    update_processed_tweet_ids(blob_service_client, processed_ids)
+        # Update the list of processed tweets
+        processed_ids.update(chunk_df['id'].tolist())
+        update_processed_tweet_ids(blob_service_client, processed_ids)
 
     return jsonify({'message': 'Data processed successfully'}), 200
-
-if __name__ == "__main__":
-    app.run(debug=True)
