@@ -22,6 +22,14 @@ openai.api_key = secret_client.get_secret("openai-api-key").value
 
 rate_limiter = RateLimiter(max_calls=3500, period=60)
 
+def openai_request(data):
+    """Make a rate-limited request to the OpenAI API."""
+    headers = {"Authorization": f"Bearer {openai.api_key}"}
+    
+    with rate_limiter:
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+        return response.json()
+        
 def analyze_text(text):
     print("Analyzing text...")
     headers = {"Authorization": f"Bearer {openai.api_key}"}
@@ -50,9 +58,7 @@ Structure the CSV output as follows:
         "max_tokens": 12000
     }
     
-    with rate_limiter:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-        response_data = response.json()
+    response_data = openai_request(data)
 
     if 'choices' in response_data:
         return response_data['choices'][0]['message']['content'].strip()
@@ -138,8 +144,7 @@ def update_aggregate_analysis(analysis, tweets_processed):
         "max_tokens": 12000
     }
     
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-    response_data = response.json()
+    response_data = openai_request(data)
 
     if 'choices' in response_data:
         updated_text = response_data['choices'][0]['message']['content'].strip() + f"\n\n---\nIteration: {iteration} | Updated on: {time.strftime('%Y-%m-%d %H:%M:%S')}"
