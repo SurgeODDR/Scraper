@@ -99,7 +99,7 @@ def update_processed_tweet_ids(blob_service_client, processed_ids):
 @app.route('/process', methods=['GET'])
 def process_data():
     print("Processing data...")
-    
+
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
     download_stream = blob_client.download_blob()
@@ -107,13 +107,14 @@ def process_data():
     df = pd.read_json(io.BytesIO(data))
 
     processed_ids = get_processed_tweet_ids(blob_service_client)
-    
+    print(f"Previously processed tweet IDs: {processed_ids}")  # Debugging log
+
     # Filter out tweets that have already been processed
     df = df[~df['id'].isin(processed_ids)]
-    
+
     chunk_size = 5
-    chunks = [df.iloc[i:i+chunk_size] for i in range(0, len(df), chunk_size)]
-    
+    chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
+
     new_processed_ids = set()
 
     for chunk_df in chunks:
@@ -126,6 +127,7 @@ def process_data():
     processed_ids.update(new_processed_ids)
     update_processed_tweet_ids(blob_service_client, processed_ids)
 
+    print(f"Updated processed tweet IDs: {processed_ids}")  # Debugging log
     return jsonify({'message': 'Data processed successfully'}), 200
     
 def compare_files(blob_service_client):
