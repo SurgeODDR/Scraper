@@ -127,13 +127,18 @@ def process_data():
     update_processed_tweet_ids(blob_service_client, processed_ids)
 
     return jsonify({'message': 'Data processed successfully'}), 200
+    
 def compare_files(blob_service_client):
     aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "aggregate_analysis.txt")
     now_aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "now_aggregate_analysis.txt")
-    
-    aggregate_content = aggregate_blob_client.download_blob().readall().decode('utf-8')
+
+    if aggregate_blob_client.exists():
+        aggregate_content = aggregate_blob_client.download_blob().readall().decode('utf-8')
+    else:
+        aggregate_content = ""  # Handle the case where the blob doesn't exist yet
+
     now_aggregate_content = now_aggregate_blob_client.download_blob().readall().decode('utf-8')
-    
+
     headers = {"Authorization": f"Bearer {openai_api_key2}"}
     data = {
         "model": "gpt-3.5-turbo-16k",
