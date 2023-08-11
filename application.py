@@ -207,8 +207,11 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
     aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "aggregate_analysis.txt")
     new_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "new_analysis.txt")
 
+    aggregate_content = ""  # Initialize the variable here
+    new_analysis_content = ""  # Initialize the variable
+    now_aggregate_content = ""  # Initialize the variable
+
     try:
-        aggregate_content = ""  # Initialize the variable here
         iteration = 1
         if aggregate_blob_client.exists():
             aggregate_content = aggregate_blob_client.download_blob().readall().decode('utf-8')
@@ -230,7 +233,7 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
     except Exception as e:
         app.logger.error(f"Error fetching new analysis content: {e}")
         return
-    
+
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
