@@ -31,19 +31,27 @@ def openai_request(data, api_key, rate_limiter_obj):
     headers = {"Authorization": f"Bearer {api_key}"}
     
     with rate_limiter_obj:
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-        return response.json()
+        try:
+            response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            app.logger.error(f"Error in OpenAI API request: {e}")
+            return {}
         
 def save_new_analysis(blob_service_client, analysis):
-    new_analysis_path = "/tmp/new_analysis.txt"
-    with open(new_analysis_path, 'w') as file:
-        file.write(analysis)
-    new_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "new_analysis.txt")
-    with open(new_analysis_path, 'rb') as data:
-        new_analysis_blob_client.upload_blob(data, overwrite=True)     
+    try:
+        new_analysis_path = "/tmp/new_analysis.txt"
+        with open(new_analysis_path, 'w') as file:
+            file.write(analysis)
+        new_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "new_analysis.txt")
+        with open(new_analysis_path, 'rb') as data:
+            new_analysis_blob_client.upload_blob(data, overwrite=True) 
+    except Exception as e:
+        app.logger.error(f"Error saving new analysis to blob: {e}")   
         
 def analyze_text(text):
-    print("Analyzing text...")
+    app.logger.info("Analyzing text...")
     headers = {"Authorization": f"Bearer {openai.api_key}"}
     data = {
         "model": "gpt-3.5-turbo-16k",
@@ -76,7 +84,7 @@ Structure the CSV output as follows:
     if 'choices' in response_data:
         return response_data['choices'][0]['message']['content'].strip()
     else:
-        print("Error in OpenAI response.")
+        app.logger.info("Error in OpenAI response.")
         return "Error analyzing the text."
 
 def update_processed_tweet_ids(blob_service_client, processed_ids):
@@ -89,40 +97,48 @@ def update_processed_tweet_ids(blob_service_client, processed_ids):
 
 @app.route('/process', methods=['GET'])
 def process_data():
-    print("Processing data...")
+    app.logger.info("Processing data...")
+    
+    try:
+        blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
+        download_stream = blob_client.download_blob()
+        data = download_stream.readall()
+        df = pd.read_json(io.BytesIO(data))
+    except Exception as e:
+        app.logger.error(f"Error fetching or processing tweets data from blob: {e}")
+        return jsonify({'message': 'Error fetching or processing tweets data'}), 500
 
-    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-    download_stream = blob_client.download_blob()
-    data = download_stream.readall()
-    df = pd.read_json(io.BytesIO(data))
+    try:
+        processed_ids = get_processed_tweet_ids(blob_service_client)
+        app.logger.info(f"Previously processed tweet IDs: {processed_ids}")  # Debugging log
+        
+        # Filter out tweets that have already been processed
+        df = df[~df['id'].isin(processed_ids)]
 
-    processed_ids = get_processed_tweet_ids(blob_service_client)
-    print(f"Previously processed tweet IDs: {processed_ids}")  # Debugging log
+        chunk_size = 5
+        chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
+        
+        new_processed_ids = set()
 
-    # Filter out tweets that have already been processed
-    df = df[~df['id'].isin(processed_ids)]
+        for chunk_df in chunks:
+            chunk_text = chunk_df['text'].str.cat(sep='\n')
+            analysis = analyze_text(chunk_text)
+            new_processed_ids.update(chunk_df['id'].tolist())
+            update_aggregate_analysis(blob_service_client, analysis, len(chunk_df))
+        
+        # Add the newly processed IDs to the existing set and save them
+        processed_ids.update(new_processed_ids)
+        update_processed_tweet_ids(blob_service_client, processed_ids)
 
-    chunk_size = 5
-    chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
-
-    new_processed_ids = set()
-
-    for chunk_df in chunks:
-        chunk_text = chunk_df['text'].str.cat(sep='\n')
-        analysis = analyze_text(chunk_text)
-        new_processed_ids.update(chunk_df['id'].tolist())
-        update_aggregate_analysis(blob_service_client, analysis, len(chunk_df))
-
-    # Add the newly processed IDs to the existing set and save them
-    processed_ids.update(new_processed_ids)
-    update_processed_tweet_ids(blob_service_client, processed_ids)
-
-    print(f"Updated processed tweet IDs: {processed_ids}")  # Debugging log
-    return jsonify({'message': 'Data processed successfully'}), 200
+        app.logger.info(f"Updated processed tweet IDs: {processed_ids}")  # Debugging log
+        return jsonify({'message': 'Data processed successfully'}), 200
+    except Exception as e:
+        app.logger.error(f"Error processing data: {e}")
+        return jsonify({'message': 'Error during data processing'}), 500
     
 def compare_files(blob_service_client):
-    print("Comparing aggregate analysis files...")
+    app.logger.info("Comparing aggregate analysis files...")
     aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "aggregate_analysis.txt")
     now_aggregate_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "now_aggregate_analysis.txt")
 
@@ -154,9 +170,9 @@ def compare_files(blob_service_client):
     response_data = response
 
     if 'choices' in response and response['choices'][0]['message']['content'].strip() == "YES":
-        print("now_aggregate_analysis.txt has bigger or the same values as aggregate_analysis.txt")
+        app.logger.info("now_aggregate_analysis.txt has bigger or the same values as aggregate_analysis.txt")
         return True
-    print("now_aggregate_analysis.txt does NOT have bigger or the same values as aggregate_analysis.txt")
+    app.logger.info("now_aggregate_analysis.txt does NOT have bigger or the same values as aggregate_analysis.txt")
     return False
     
 def get_processed_tweet_ids(blob_service_client):
@@ -171,7 +187,7 @@ def get_processed_tweet_ids(blob_service_client):
     return set()
 
 def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
-    print("Updating aggregate analysis...")
+    app.logger.info("Updating aggregate analysis...")
 
     # Save the new analysis to new_analysis.txt
     save_new_analysis(blob_service_client, analysis)
@@ -234,9 +250,9 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
         if is_valid:
             with open(now_aggregate_path, 'rb') as data:
                 aggregate_blob_client.upload_blob(data, overwrite=True)
-            print("Updated aggregate_analysis.txt successfully")
+            app.logger.info("Updated aggregate_analysis.txt successfully")
         else:
-            print("The new aggregate analysis did not have bigger or the same values as the previous one.")
+            app.logger.info("The new aggregate analysis did not have bigger or the same values as the previous one.")
 
 FLAG_TRIGGER_PROCESS = True
 
@@ -247,7 +263,7 @@ def monitor_and_trigger_process():
                 requests.get("https://gptanalyser.azurewebsites.net/process")
                 FLAG_TRIGGER_PROCESS = False
             except Exception as e:
-                print(f"Error: {e}")
+                app.logger.info(f"Error: {e}")
             time.sleep(60)
 
 def run_app():
@@ -272,7 +288,7 @@ if __name__ == "__main__":
             monitor_process.join()
             break
         except Exception as e:
-            print(f"Exception: {e}")
+            app.logger.info(f"Exception: {e}")
             process.terminate()
             monitor_process.terminate()
             process = Process(target=run_app)
