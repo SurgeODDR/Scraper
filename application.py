@@ -157,12 +157,6 @@ def compare_files(blob_service_client):
     if 'choices' in response_data and response_data['choices'][0]['message']['content'].strip() == "YES":
         return True
     return False
-    
-
-def openai_request(data):
-    headers = {"Authorization": f"Bearer {openai.api_key}"}
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-    return response.json()
 
 def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
     print("Updating aggregate analysis...")
