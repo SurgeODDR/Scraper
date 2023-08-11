@@ -57,21 +57,19 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-You are analyzing the text provided. Provide a quantitative analysis in CSV format. The analysis should cover:
-- Distribution of sentiments (Positive, Negative, Neutral) with percentages.
-- Distribution of key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment) with percentages.
-- Mentions of keywords related to inequality, unfairness, diminished trust in the government, unjust actions, disloyalty, and perceptions of corruption, and their associated sentiment percentages.
-
-Structure the CSV output as follows:
-"Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
-"Sentiments, [Positive Percentage], [Negative Percentage], [Neutral Percentage], [Total Sentiment Mentions]"
-"Emotions: Happiness, [Positive Percentage], -, -, [Total Happiness Mentions]"
-"Emotions: Sadness, [Negative Percentage], -, -, [Total Sadness Mentions]"
-...
-"Keywords: Inequality, -, [Negative Percentage], -, [Total Inequality Mentions]"
-"Keywords: Corruption, -, [Negative Percentage], -, [Total Corruption Mentions]"
-...
-"""
+    Generate a quantitative analysis in CSV format based on the provided text. Cover:
+    - Sentiments (Positive, Negative, Neutral)
+    - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
+    - Keywords related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
+    
+    CSV Structure:
+    "Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
+    "Sentiments, [Positive Percentage], [Negative Percentage], [Neutral Percentage], [Total Sentiment Mentions]"
+    "Emotions: Happiness, [Positive Percentage], -, -, [Total Happiness Mentions]"
+    ...
+    "Keywords: Inequality, -, [Negative Percentage], -, [Total Inequality Mentions]"
+    ...
+    """
             },
             {"role": "user", "content": text}
         ],
@@ -148,21 +146,26 @@ def compare_files(blob_service_client):
     now_aggregate_content = now_aggregate_blob_client.download_blob().readall().decode('utf-8')
 
     headers = {"Authorization": f"Bearer {openai_api_key2}"}
-    data = {
-        "model": "gpt-3.5-turbo-16k",
-        "messages": [
-            {
-                "role": "system",
-                "content": "Are the values bigger or the same in 'now_aggregate_analysis.txt' compared to 'aggregate_analysis.txt'? The response can only be YES or NO."
-            },
-            {
-                "role": "user",
-                "content": f"Old Aggregate Analysis:\n{aggregate_content}\n\nNew Aggregate Analysis:\n{now_aggregate_content}"
-            }
-        ],
-        "temperature": 0.3,
-        "max_tokens": 12000
-    }
+data = {
+    "model": "gpt-3.5-turbo-16k",
+    "messages": [
+        {
+            "role": "system",
+            "content": """
+Please compare each corresponding value in 'now_aggregate_analysis.txt' against 'aggregate_analysis.txt'. For every category and sub-category, ensure that the value in 'now_aggregate_analysis.txt' is either the same or larger than the corresponding value in 'aggregate_analysis.txt'. Respond with 'YES' if all values in 'now_aggregate_analysis.txt' meet this criterion, otherwise respond with 'NO'.
+Example:
+"Sentiments, 50%, 30%, 20%, 100" in 'aggregate_analysis.txt' should be compared with "Sentiments, 55%, 28%, 17%, 105" in 'now_aggregate_analysis.txt'. The latter has higher or equal values for all categories.
+"""
+        },
+        {
+            "role": "user",
+            "content": f"Old Aggregate Analysis:\n{aggregate_content}\n\nNew Aggregate Analysis:\n{now_aggregate_content}"
+        }
+    ],
+    "temperature": 0.3,
+    "max_tokens": 12000
+}
+
 
     response = openai_request(data, openai_api_key2, rate_limiter2)  # Use the second API key and its rate limiter
     response_data = response
@@ -209,29 +212,18 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
 
     new_analysis_content = new_analysis_blob_client.download_blob().readall().decode('utf-8')
     
-    data = {
-        "model": "gpt-3.5-turbo-16k",
-        "messages": [
-            {
-                "role": "system",
-                "content": """
-    You have two sets of data: an existing aggregate analysis and a new analysis. Your task is to integrate the new analysis into the existing one. Follow these steps:
-    1. Ensure that the integrated data is in CSV format.
-    2. Maintain academic rigor and standards throughout the process.
-    3. Keep the narrative cohesive and comprehensive.
-    4. If there are similar data points between the new analysis and the existing aggregate, combine them accurately without duplication.
-    5. Ensure that the final integrated data is accurate and reflects the true nature of both the existing and new analyses.
-    Remember, the integrity and accuracy of the data are paramount.
-    """
-            },
-            {
-                "role": "user",
-                "content": f"Existing Aggregate Analysis:\n{aggregate_content}\n\nNew Analysis:\n{new_analysis_content}"
-            }
-        ],
-        "temperature": 0.3,
-        "max_tokens": 12000
-    }
+data = {
+    "model": "gpt-3.5-turbo-16k",
+    "messages": [
+        {"role": "system", "content": """
+Merge the provided existing aggregate analysis with the new analysis into a single cohesive dataset. Ensure the merged data is in CSV format. Combine similar data points without duplication and ensure accuracy.
+"""
+        },
+        {"role": "user", "content": f"Existing Aggregate Analysis:\n{aggregate_content}\n\nNew Analysis:\n{new_analysis_content}"}
+    ],
+    "temperature": 0.3,
+    "max_tokens": 12000
+}
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
     if 'choices' in response_data:
