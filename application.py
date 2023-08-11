@@ -100,13 +100,19 @@ def update_audit_log(blob_service_client, num_tweets, start_id, end_id, mentions
     
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "audit.csv")
     if blob_client.exists():
+        app.logger.info("audit.csv exists. Fetching its content.")
         current_content = blob_client.download_blob().readall().decode('utf-8')
         updated_content = current_content + new_log
     else:
+        app.logger.info("audit.csv doesn't exist. Creating a new one.")
         header = "Timestamp,NumOfTweets,StartTweetID,EndTweetID,MentionsDetails\n"
         updated_content = header + new_log
+        blob_client.upload_blob(header)  # Explicitly creating the file with the header.
+        time.sleep(2)  # Small delay to ensure the file is created before appending.
 
+    app.logger.info("Saving updated content to audit.csv.")
     save_to_blob(blob_service_client, updated_content, "audit.csv")
+    time.sleep(2)  # Small delay to ensure no overlapping writes.
 
 @app.route('/process', methods=['GET'])
 def process_data():
