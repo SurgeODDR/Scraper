@@ -137,21 +137,21 @@ def aggregate_analysis(chunk_text):
         "Authorization": f"Bearer {openai.api_key}"
     }
 
-# Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
-data = {
-    "model": "gpt-3.5-turbo-16k",
-    "messages": [
-        {"role": "system", "content": """
+    # Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
+    data = {
+        "model": "gpt-3.5-turbo-16k",
+        "messages": [
+            {"role": "system", "content": """
 You are tasked with the responsibility of updating an ongoing aggregate analysis of the Panama Papers scandal based on new summarized data chunks. Your goal is to read the current aggregate analysis and then integrate the provided new summary into it. Ensure that the updated analysis seamlessly integrates the new data, remains comprehensive, and adheres to a structured narrative. Remember, the objective is to build upon the existing aggregate analysis without redundancy, ensuring that the overall analysis remains cohesive.
 """ },
-        {"role": "user", "content": aggregate_text + "\n\nNew Summary:\n" + summary_chunk}
-    ],
-    "temperature": 0.3,
-    "max_tokens": 12000
-}
+            {"role": "user", "content": aggregate_text + "\n\nNew Summary:\n" + chunk_text} # Updated variable from summary_chunk to chunk_text
+        ],
+        "temperature": 0.3,
+        "max_tokens": 12000
+    }
     
-response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-response_data = response.json()
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+    response_data = response.json()
 
     if 'choices' in response_data:
         analysis = response_data['choices'][0]['message']['content'].strip()
