@@ -45,7 +45,25 @@ def analyze_text(text):
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": "You are a research assistant specializing in sentiment and emotion analysis. Analyze the following text, adhering to academic standards:\n\nSentiment Quantification: Quantify the sentiment expressed within the text, providing a percentage distribution of positive, negative, and neutral sentiments. Include an interpretation of how these sentiments align with public opinion on the subject. Investigate any mentions of inequality, unfairness, diminished trust in the government, unjust actions, disloyalty, and perceptions of corruption.\n\nEmotion Analysis: Identify and quantify the presence of key emotions such as happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment within the text. Provide an interpretation of these emotional tones in the context of the subject matter, such as the Panama Papers.\n\nSpecial Attention: Highlight any mentions of well-known figures such as celebrities, politicians, or other public figures, and analyze the sentiment and emotional tones associated with these mentions."},
+            {"role": "system", "content": """
+You are analyzing the text provided. Provide a quantitative analysis in CSV format. The analysis should cover:
+- Distribution of sentiments (Positive, Negative, Neutral) with percentages.
+- Distribution of key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment) with percentages.
+- Mentions of keywords related to inequality, unfairness, diminished trust in the government, unjust actions, disloyalty, and perceptions of corruption, and their associated sentiment percentages.
+- Highlight and quantify mentions of well-known figures such as celebrities, politicians, or other public figures and analyze the sentiment and emotional tones associated with these mentions.
+
+Structure the CSV output as follows:
+"Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
+"Sentiments, [Positive Percentage], [Negative Percentage], [Neutral Percentage], [Total Sentiment Mentions]"
+"Emotions: Happiness, [Positive Percentage], -, -, [Total Happiness Mentions]"
+"Emotions: Sadness, [Negative Percentage], -, -, [Total Sadness Mentions]"
+...
+"Keywords: Inequality, -, [Negative Percentage], -, [Total Inequality Mentions]"
+"Keywords: Corruption, -, [Negative Percentage], -, [Total Corruption Mentions]"
+...
+"Public Figures: [Public Figure Name], [Positive Percentage], [Negative Percentage], [Neutral Percentage], [Total Mention of the Figure]"
+"""
+            },
             {"role": "user", "content": text}
         ],
         "temperature": 0.3,
@@ -66,60 +84,38 @@ def analyze_text(text):
 def process_data():
     try:
         blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+        
+        # Fetch the data from Tweets.json
         blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
         download_stream = blob_client.download_blob()
         data = download_stream.readall()
         app.logger.info(f"Data from blob: {data[:100]}")
         df = pd.read_json(io.BytesIO(data))
-        chunk_size = 3  # Reduced chunk size for testing
-        num_chunks = len(df) // chunk_size
-        if len(df) % chunk_size:
-            num_chunks += 1
-        app.logger.info(f"Processing {num_chunks} chunks")
+        
+        # Split the data into chunks for analysis
+        chunk_size = 10  # Adjust as necessary
+        chunks = [df['text'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
+        
+        # Initialize the tweets_processed variable
+        tweets_processed = 0
+        
+        # Analyze each chunk and update aggregate analysis
+        for i, chunk in enumerate(chunks):
+            # Analyze the chunk
+            analysis = analyze_text(chunk)
+            tweets_processed += len(chunk.split('\n'))  # Count the number of tweets in the current chunk
+            
+            # Update the aggregate analysis with this analysis and the number of tweets processed
+            update_aggregate_analysis(analysis, tweets_processed)
+        
+        return jsonify({'message': 'Data processed and aggregate analysis updated successfully'}), 200
 
-        for i in range(num_chunks):
-            app.logger.info(f"Processing chunk {i + 1} of {num_chunks}")
-            chunk_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", f"Analysed_Tweets_{i}.json")
-            if chunk_blob_client.exists():
-                app.logger.info(f"Chunk {i + 1} already processed, skipping")
-                continue
-            start = i * chunk_size
-            end = start + chunk_size
-            df_chunk = df[start:end].copy()
-            app.logger.info(f"Analyzing chunk {i + 1}")
-            df_chunk['Analysis'] = df_chunk['text'].apply(analyze_text)
-            chunk_json = df_chunk.to_json(orient='records')
-            app.logger.info(f"Uploading chunk {i + 1} to blob")
-            chunk_blob_client.upload_blob(chunk_json, overwrite=True)
-            app.logger.info(f"Finished processing chunk {i + 1}, saved to blob")
-            time.sleep(5)  # This delay helps to avoid hitting any API limits
     except AzureError as ae:
         app.logger.error(f"AzureError encountered: {str(ae)}")
     except Exception as e:
         app.logger.error(f"General error encountered: {str(e)}")
     
-    return jsonify({'message': 'Data processed successfully'}), 200
-
-@app.route('/consolidate', methods=['GET'])
-def consolidate_data():
-    """Fetches the chunked data from Azure Storage and consolidates it into a single file."""
-    blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    container_client = blob_service_client.get_container_client("scrapingstoragecontainer")
-
-    df_consolidated = pd.DataFrame()
-
-    for blob in container_client.list_blobs():
-        if "Analysed_Tweets_" in blob.name:
-            app.logger.info(f"Consolidating {blob.name}")
-            blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", blob.name)
-            download_stream = blob_client.download_blob()
-            df_chunk = pd.read_json(io.BytesIO(download_stream.readall()))
-            df_consolidated = pd.concat([df_consolidated, df_chunk])
-
-    consolidated_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Analysed_Tweets.json")
-    consolidated_blob_client.upload_blob(df_consolidated.to_json(orient='records'), overwrite=True)
-
-    return jsonify({'message': 'Data consolidated successfully'}), 200
+    return jsonify({'error': 'An error occurred while processing the data.'}), 500
         
 def summarize_chunk(chunk_text):
     """Summarizes a chunk of text using OpenAI."""
@@ -169,7 +165,7 @@ Structure the CSV output as follows:
         
 import time
 
-def update_aggregate_analysis(summary_chunk):
+def update_aggregate_analysis(analysis, tweets_processed):
     """Updates the aggregate_analysis.txt with the summary_chunk and uploads it to Azure Blob Storage."""
 
     aggregate_path = "/tmp/aggregate_analysis.txt"
@@ -197,16 +193,18 @@ def update_aggregate_analysis(summary_chunk):
         "Authorization": f"Bearer {openai.api_key}"
     }
 
-    # Modify the prompt for academic robustness
+    # Modify the prompt to include the number of tweets processed
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": "You are tasked with updating the aggregate analysis with the new summary provided. Ensure the update adheres to academic standards. Integrate the new summary into the existing aggregate analysis in a way that maintains a cohesive, comprehensive, and academically robust narrative."},
-            {"role": "user", "content": aggregate_text + "\n\n" + summary_chunk}
+            {"role": "system", "content": f"Your task is to merge new analytical data with the existing aggregate while maintaining the integrity and structure of the information. As of now, {tweets_processed} tweets have been analyzed. Follow these guidelines: \n- Preserve the CSV format. \n- Ensure academic rigor in the integration. \n- The narrative should be cohesive and comprehensive. \n- The existing aggregate is cumulative; integrate similar data points without redundancy."},
+            {"role": "user", "content": f"Existing Aggregate Analysis:\n{aggregate_text}\n\nNew Analysis:\n{analysis}"}
         ],
         "temperature": 0.3,
         "max_tokens": 12000
     }
+
+
     
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
     response_data = response.json()
@@ -250,6 +248,7 @@ def summarize_data():
         chunks = [df['Analysis'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
 
         # Summarize each chunk and update aggregate analysis
+        tweets_processed = 0
         for i, chunk in enumerate(chunks):
             summary_blob_name = f"Summary_Chunk_{i}.txt"
             summary_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", summary_blob_name)
@@ -257,10 +256,12 @@ def summarize_data():
             if not summary_blob_client.exists():
                 # Summarize the chunk
                 summary = summarize_chunk(chunk)
+                tweets_processed += len(chunk.split('\n'))  # Count the number of tweets in the current chunk
+                
                 # Store the summary
                 summary_blob_client.upload_blob(summary, overwrite=True)
-                # Update the aggregate analysis with this summary
-                update_aggregate_analysis(summary)
+                # Update the aggregate analysis with this summary and the number of tweets processed
+                update_aggregate_analysis(summary, tweets_processed)
         
         # After all chunks are processed, fetch the final aggregate analysis
         with open("/tmp/aggregate_analysis.txt", 'r') as file:
