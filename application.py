@@ -77,9 +77,14 @@ def analyze_text(text):
     response_data = openai_request(data, openai.api_key, rate_limiter)
     analysis_content = response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
     
-    df = pd.read_csv(io.StringIO(analysis_content), index_col=0)
-    category_counts = df.to_dict()["Total Mentions"]
-    
+    try:
+        df = pd.read_csv(io.StringIO(analysis_content), index_col=0)
+        category_counts = df.to_dict()["Total Mentions"]
+    except KeyError:
+        app.logger.error(f"Unexpected structure in response for text: {text[:100]}...")  # Log first 100 chars for reference
+        app.logger.error(analysis_content)  # Log the actual content for debugging
+        category_counts = {}  # Set it to an empty dictionary to avoid further issues
+
     return analysis_content, category_counts
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
