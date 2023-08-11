@@ -120,52 +120,6 @@ def consolidate_data():
     consolidated_blob_client.upload_blob(df_consolidated.to_json(orient='records'), overwrite=True)
 
     return jsonify({'message': 'Data consolidated successfully'}), 200
-    
-def aggregate_analysis(chunk_text):
-    """Aggregates and summarizes a chunk of text using OpenAI and past analyses."""
-    
-    # Check if the aggregate_analysis.txt file exists
-    aggregate_path = "/tmp/aggregate_analysis.txt"
-    if os.path.exists(aggregate_path):
-        with open(aggregate_path, 'r') as file:
-            aggregate_text = file.read()
-    else:
-        aggregate_text = ""  # Initialize an empty string if the file doesn't exist
-        logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
-    
-    headers = {
-        "Authorization": f"Bearer {openai.api_key}"
-    }
-
-    # Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
-    data = {
-        "model": "gpt-3.5-turbo-16k",
-        "messages": [
-            {"role": "system", "content": """
-You are tasked with the responsibility of updating an ongoing aggregate analysis of the Panama Papers scandal based on new summarized data chunks. Your goal is to read the current aggregate analysis and then integrate the provided new summary into it. Ensure that the updated analysis seamlessly integrates the new data, remains comprehensive, and adheres to a structured narrative. Remember, the objective is to build upon the existing aggregate analysis without redundancy, ensuring that the overall analysis remains cohesive.
-""" },
-            {"role": "user", "content": aggregate_text + "\n\nNew Summary:\n" + chunk_text} # Updated variable from summary_chunk to chunk_text
-        ],
-        "temperature": 0.3,
-        "max_tokens": 12000
-    }
-    
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-    response_data = response.json()
-
-    if 'choices' in response_data:
-        analysis = response_data['choices'][0]['message']['content'].strip()
-        
-        # Append the new analysis to the aggregate_analysis.txt
-        with open(aggregate_path, 'a') as file:
-            file.write("\n\nChunk Analysis:\n" + chunk_text + "\n\nSummary:\n" + analysis)
-        logging.info(f"Appended to {aggregate_path} successfully")
-        return analysis
-    else:
-        error_message = f"Unexpected response from OpenAI: {response_data}"
-        app.logger.error(error_message)
-        logging.error(error_message)
-        return "Error summarizing the data."
         
 def summarize_chunk(chunk_text):
     """Summarizes a chunk of text using OpenAI."""
@@ -186,7 +140,6 @@ You are analyzing a set of {tweet_count} tweets. Provide a quantitative summary 
 - Distribution of sentiments (Positive, Negative, Neutral) with percentages.
 - Distribution of key emotions (Anger, Distrust, Skepticism, Outrage/Indignation) with percentages.
 - Total mentions of keywords related to inequality and corruption, and their associated sentiment percentages.
-- Count of references to well-known figures, the figures mentioned, and their associated sentiment percentages.
 
 Structure the CSV output as follows:
 "Category, Positive (%), Negative (%), Neutral (%), Total Mentions"
@@ -196,8 +149,6 @@ Structure the CSV output as follows:
 ...
 "Keywords: Inequality, -, p%, -, Total"
 "Keywords: Corruption, -, q%, -, Total"
-...
-"Figure: [Name], r%, s%, t%, Total"
 ...
 """
             },
