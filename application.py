@@ -82,8 +82,8 @@ def analyze_text(text):
             },
             {"role": "user", "content": text}
         ],
-        "temperature": 0.3,
-        "max_tokens": 12000
+        "temperature": 0.1,
+        "max_tokens": 13000
     }
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
