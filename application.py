@@ -118,18 +118,16 @@ def process_data():
 
         chunk_size = 5
         chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
-        
-        new_processed_ids = set()
 
         for chunk_df in chunks:
             chunk_text = chunk_df['text'].str.cat(sep='\n')
             analysis = analyze_text(chunk_text)
-            new_processed_ids.update(chunk_df['id'].tolist())
+            
+            # Add the newly processed IDs to the existing set and save them immediately after processing the chunk
+            processed_ids.update(chunk_df['id'].tolist())
+            update_processed_tweet_ids(blob_service_client, processed_ids)
+            
             update_aggregate_analysis(blob_service_client, analysis, len(chunk_df))
-        
-        # Add the newly processed IDs to the existing set and save them
-        processed_ids.update(new_processed_ids)
-        update_processed_tweet_ids(blob_service_client, processed_ids)
 
         app.logger.info(f"Updated processed tweet IDs: {processed_ids}")  # Debugging log
         return jsonify({'message': 'Data processed successfully'}), 200
