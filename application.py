@@ -148,7 +148,7 @@ def compare_files(blob_service_client):
             }
         ],
         "temperature": 0.3,
-        "max_tokens": 300
+        "max_tokens": 12000
     }
 
     response = openai_request(data, openai_api_key2, rate_limiter2)  # Use the second API key and its rate limiter
