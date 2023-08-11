@@ -67,7 +67,7 @@ Structure the CSV output as follows:
             {"role": "user", "content": text}
         ],
         "temperature": 0.3,
-        "max_tokens": 16000
+        "max_tokens": 12000
     }
     
     response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
