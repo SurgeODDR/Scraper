@@ -75,7 +75,7 @@ def process_data():
     download_stream = blob_client.download_blob()
     data = download_stream.readall()
     df = pd.read_json(io.BytesIO(data))
-    chunk_size = 10
+    chunk_size = 5
     chunks = [df['text'][i:i+chunk_size].str.cat(sep='\n') for i in range(0, len(df), chunk_size)]
     tweets_processed = 0
 
