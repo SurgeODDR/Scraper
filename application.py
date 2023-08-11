@@ -228,14 +228,15 @@ def update_aggregate_analysis(blob_service_client, analysis, tweets_processed):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-    Merge the provided existing aggregate analysis with the new analysis into a single cohesive dataset. Ensure the merged data is in CSV format. Combine similar data points without duplication and ensure accuracy.
-    """
+        Merge the provided existing aggregate analysis with the new analysis into a single cohesive dataset. For each category and sub-category in the CSV format, sum the corresponding values from the new analysis to the existing aggregate analysis. Ensure accuracy in the summation and present the merged data in CSV format without duplication.
+        """
             },
             {"role": "user", "content": f"Existing Aggregate Analysis:\n{aggregate_content}\n\nNew Analysis:\n{new_analysis_content}"}
         ],
         "temperature": 0.3,
         "max_tokens": 12000
     }
+
     
     try:
         response_data = openai_request(data, openai.api_key, rate_limiter)
