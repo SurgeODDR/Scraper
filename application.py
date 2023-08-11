@@ -129,13 +129,13 @@ def aggregate_analysis(chunk_text):
     if os.path.exists(aggregate_path):
         with open(aggregate_path, 'r') as file:
             aggregate_text = file.read()
-else:
-    aggregate_text = ""  # Initialize an empty string if the file doesn't exist
-    logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
+    else:
+        aggregate_text = ""  # Initialize an empty string if the file doesn't exist
+        logging.info("aggregate_analysis.txt does not exist. Initializing an empty string for aggregate_text.")
     
-headers = {
-    "Authorization": f"Bearer {openai.api_key}"
-}
+    headers = {
+        "Authorization": f"Bearer {openai.api_key}"
+    }
 
 # Create a new prompt to aggregate the summary_chunk into the existing aggregate_text
 data = {
