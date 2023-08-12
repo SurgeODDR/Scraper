@@ -20,7 +20,6 @@ openai.api_key = secret_client.get_secret("openai-api-key").value
 
 rate_limiter = RateLimiter(max_calls=3500, period=60)
 
-# Functions
 def openai_request(data):
     headers = {"Authorization": f"Bearer {openai.api_key}"}
     url = "https://api.openai.com/v1/chat/completions"
@@ -28,8 +27,7 @@ def openai_request(data):
     with rate_limiter:
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
-        content = response.json().get('choices', [{}])[0].get('message', {}).get('content', "")
-        return str(content).strip()
+        return response.json().get('choices', [{}])[0].get('message', {}).get('content', "").strip()
 
 def save_to_blob(blob_service_client, content, file_name):
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", file_name)
@@ -47,6 +45,7 @@ def update_processed_tweet_ids(blob_service_client, processed_ids):
     save_to_blob(blob_service_client, ids_str, "processed_tweet_ids.txt")
 
 def analyze_text(text):
+    # Define request payload
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
@@ -76,6 +75,7 @@ def clean_and_format_data(df):
     df_grouped = df.groupby(df.index).sum()
     df_cleaned = df_grouped.reset_index()
 
+    # Handle unexpected column numbers
     if len(df_cleaned.columns) == 2:
         df_cleaned.columns = ['Name or Category', 'Total Mentions']
     else:
@@ -83,27 +83,11 @@ def clean_and_format_data(df):
 
     return df_cleaned
 
-def combine_and_save_analysis(blob_service_client, new_analysis):
-    new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
-    new_df.index = new_df.index.str.split(',').str[0]
-
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
-    if blob_client.exists():
-        existing_content = blob_client.download_blob().readall().decode('utf-8')
-        existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
-        existing_df.index = existing_df.index.str.split(',').str[0]
-        combined_df = new_df.add(existing_df, fill_value=0)
-    else:
-        combined_df = new_df
-
-    cleaned_combined_df = clean_and_format_data(combined_df)
-    save_to_blob(blob_service_client, cleaned_combined_df.to_csv(), "c_db_analysis.csv")
-    
 def combine_dataframes(new_df, existing_df):
     # This function combines the new and existing dataframes.
     combined_df = new_df.add(existing_df, fill_value=0)
     return combined_df
-    
+
 @app.route('/process', methods=['GET'])
 def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
@@ -115,17 +99,14 @@ def process_data():
         data = download_stream.readall()
         df = pd.read_json(io.BytesIO(data))
 
-        # Ensure the 'id' column in df is of integer type
-        df['id'] = df['id'].astype(int)
-
         # Get already processed tweet IDs
         processed_tweet_ids = get_processed_tweet_ids(blob_service_client)
         new_processed_ids = []
 
         # Analyzing each tweet
         for index, row in df.iterrows():
-            tweet_id = int(row['id'])  # Ensure tweet_id is of integer type
-            tweet_text = str(row['text'])  # Ensure tweet_text is of string type
+            tweet_id = row['id']
+            tweet_text = row['text']
 
             # Skip if the tweet is already processed
             if tweet_id in processed_tweet_ids:
@@ -134,13 +115,15 @@ def process_data():
             analysis = analyze_text(tweet_text)
 
             # Convert analysis into DataFrame
-            new_df = pd.DataFrame([analysis])
+            new_df = pd.read_csv(io.StringIO(analysis), index_col=0)
+            new_df.index = new_df.index.str.split(',').str[0]
 
             # Fetch existing data and combine with new analysis
             db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
             if db_analysis_blob_client.exists():
                 existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
                 existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
+                existing_df.index = existing_df.index.str.split(',').str[0]
                 combined_df = combine_dataframes(new_df, existing_df)
             else:
                 combined_df = new_df
@@ -161,3 +144,6 @@ def process_data():
     except Exception as e:
         app.logger.error(f"An error occurred: {e}")
         return jsonify({'message': f"An error occurred: {str(e)}"}), 500
+
+if __name__ == "__main__":
+    app.run()
