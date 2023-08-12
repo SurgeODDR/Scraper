@@ -69,7 +69,7 @@ def analyze_text(text):
             },
             {"role": "user", "content": text}
         ],
-        "temperature": 0.01,
+        "temperature": 0.3,
         "max_tokens": 13000
     }
 
@@ -90,39 +90,24 @@ def flexible_column_matching(df, keyword):
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
     try:
-        new_df = pd.read_csv(io.StringIO(new_analysis))
-        
-        # Log columns for debugging
-        app.logger.info(f"Columns in new analysis: {new_df.columns.tolist()}")
-        
-        # Flexibly match column names
-        name_col = flexible_column_matching(new_df, "Celebrity/Politician Name")
-        sentiment_col = flexible_column_matching(new_df, "Sentiment/Emotion")
-        mentions_col = flexible_column_matching(new_df, "Total Mentions")
+        new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
 
-        if not name_col or not sentiment_col or not mentions_col:
-            app.logger.error("Essential columns not found in new analysis.")
-            return
-        
-        # Validate that 'Total Mentions' contains numerical values
-        if not pd.api.types.is_numeric_dtype(new_df[mentions_col]):
-            app.logger.error("Invalid data type in 'Total Mentions' column.")
-            return
+        # Standardize the index labels (remove counts)
+        new_df.index = new_df.index.str.split(',').str[0]
 
         celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
         if celeb_db_analysis_blob_client.exists():
             existing_content = celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')
-            existing_df = pd.read_csv(io.StringIO(existing_content))
-            
-            # Concatenate the new and existing dataframes
-            combined_df = pd.concat([new_df, existing_df])
-            
-            # Group by name and sentiment/emotion and then sum the total mentions
-            combined_df = combined_df.groupby([name_col, sentiment_col]).sum().reset_index()
+            existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
+
+            # Standardize the index labels of the existing df
+            existing_df.index = existing_df.index.str.split(',').str[0]
+
+            combined_df = new_df.add(existing_df, fill_value=0)
         else:
             combined_df = new_df
 
-        combined_csv_content = combined_df.to_csv(index=False)
+        combined_csv_content = combined_df.to_csv()
         save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
 
     except Exception as e:
@@ -131,21 +116,30 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
 @app.route('/process', methods=['GET'])
 def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
+    
+    # Fetch the tweets from Azure Blob Storage
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-    df = pd.read_json(io.BytesIO(blob_client.download_blob().readall()))
-
+    download_stream = blob_client.download_blob()
+    data = download_stream.readall()
+    df = pd.read_json(io.BytesIO(data))
+    
+    # Retrieve the list of tweet IDs that have been previously processed
     processed_ids = get_processed_tweet_ids(blob_service_client)
+
+    # Filter out tweets that have been processed before
     df = df[~df['id'].isin(processed_ids)]
     
+    # Split the remaining tweets into chunks for processing
     chunk_size = 5
     chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
     
+    # Process each chunk and update the aggregate analysis CSV file
     for chunk_df in chunks:
         chunk_text = chunk_df['text'].str.cat(sep='\n')
         new_analysis = analyze_text(chunk_text)
         combine_and_save_analysis(blob_service_client, new_analysis)
-        
-        # Update processed IDs after processing each chunk
+
+        # Update the list of processed tweet IDs and save back to Azure Blob Storage
         processed_ids.update(chunk_df['id'].tolist())
         save_to_blob(blob_service_client, "\n".join(map(str, processed_ids)), "processed_tweet_ids.txt")
 
