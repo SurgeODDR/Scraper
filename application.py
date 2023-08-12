@@ -6,6 +6,7 @@ from azure.storage.blob import BlobServiceClient
 import io
 import logging
 from ratelimiter import RateLimiter
+from azure.keyvault.secrets import SecretClient
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
