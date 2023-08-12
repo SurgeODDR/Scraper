@@ -122,4 +122,4 @@ def process_data():
         processed_ids.update(chunk_df['id'].tolist())
         update_processed_tweet_ids(blob_service_client, processed_ids)
 
-return jsonify({'message': 'Data processed successfully'}), 200
+    return jsonify({'message': 'Data processed successfully'}), 200
