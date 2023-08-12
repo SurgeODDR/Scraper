@@ -105,7 +105,7 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
             existing_df.index = existing_df.index.str.split(',').str[0]
             
             # Convert values to numeric for addition. Fill NaN with 0 for addition.
-            combined_df = new_df.astype(float).add(existing_df.astype(float), fill_value=0)
+            combined_df = new_df.apply(pd.to_numeric, errors='coerce').add(existing_df.apply(pd.to_numeric, errors='coerce'), fill_value=0)
         else:
             combined_df = new_df
 
@@ -113,7 +113,6 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
         save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
     except Exception as e:
         app.logger.error(f"Error in combine_and_save_analysis: {str(e)}")
-
 
 @app.route('/process', methods=['GET'])
 def process_data():
