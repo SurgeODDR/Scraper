@@ -137,7 +137,10 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
     else:
         combined_df = new_df
 
-    combined_csv_content = combined_df.to_csv()
+    # Clean and format the combined dataframe
+    cleaned_combined_df = clean_and_format_data(combined_df)
+
+    combined_csv_content = cleaned_combined_df.to_csv()
     save_to_blob(blob_service_client, combined_csv_content, "c_db_analysis.csv")
 
 @app.route('/process', methods=['GET'])
