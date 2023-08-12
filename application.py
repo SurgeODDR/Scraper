@@ -101,10 +101,6 @@ def clean_and_format_data(df):
 
     return df_cleaned
 
-# Usage:
-# Assuming combined_df contains the data you provided
-cleaned_data = clean_and_format_data(combined_df)
-
 def combine_and_save_analysis(blob_service_client, new_analysis):
     new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
 
