@@ -31,8 +31,8 @@ def openai_request(data):
             app.logger.error(f"Error in OpenAI API request: {e}")
             return {}
 
-def append_analysis_to_blob(blob_service_client, analysis):
-    """Append an individual analysis to the text file on the blob."""
+def append_analysis_to_blob(blob_service_client, source_info, analysis):
+    """Append an individual analysis with source info to the text file on the blob."""
     try:
         blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "individual_analyses.txt")
         
@@ -40,8 +40,9 @@ def append_analysis_to_blob(blob_service_client, analysis):
             current_content = blob_client.download_blob().readall().decode('utf-8')
         else:
             current_content = ""
-
-        combined_content = current_content + "\n" + analysis
+        
+        combined_content = (current_content + "\nSource Info:\n" + source_info +
+                            "\n\nAnalysis:\n" + analysis + "\n" + "-"*50)  # Adding a separator for clarity
         blob_client.upload_blob(combined_content, overwrite=True)
     except Exception as e:
         app.logger.error(f"Error appending analysis to blob: {e}")
@@ -81,8 +82,16 @@ def process_data():
     
     for _, row in df.iterrows():
         tweet_text = row['text']
+        tweet_id = row['id']
+        created_time = row['created_at']  # Assuming the column name is 'created_at'
+        author_id = row['user']['id']  # Assuming user details are in a nested 'user' dictionary
+        
+        source_info = (f"Tweet ID: {tweet_id}\nCreated Time: {created_time}\n"
+                       f"Tweet Text: {tweet_text}\nAuthor ID: {author_id}")
+        
         analysis = analyze_text(tweet_text)
-        append_analysis_to_blob(blob_service_client, analysis)
+        
+        append_analysis_to_blob(blob_service_client, source_info, analysis)
         
     return jsonify({'message': 'Data processed successfully'}), 200
 
