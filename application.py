@@ -85,6 +85,25 @@ def analyze_text(text):
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
+    
+def clean_and_format_data(df):
+    # Convert all index values to lowercase for consistent casing
+    df.index = df.index.str.lower()
+
+    # Group by index and sum the values to aggregate counts
+    df_grouped = df.groupby(df.index).sum()
+
+    # Resetting the index
+    df_cleaned = df_grouped.reset_index()
+
+    # Renaming columns for clarity
+    df_cleaned.columns = ['Name or Category', 'Total Mentions']
+
+    return df_cleaned
+
+# Usage:
+# Assuming combined_df contains the data you provided
+cleaned_data = clean_and_format_data(combined_df)
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
     new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
@@ -100,7 +119,21 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
         # Standardize the index labels of the existing df
         existing_df.index = existing_df.index.str.split(',').str[0]
 
-        combined_df = new_df.add(existing_df, fill_value=0)
+        # Identify columns with string data type in either dataframe
+        str_cols_new = new_df.columns[new_df.dtypes == 'object']
+        str_cols_existing = existing_df.columns[existing_df.dtypes == 'object']
+        str_cols = set(str_cols_new) | set(str_cols_existing)
+
+        # Exclude string columns from the addition operation
+        non_str_cols = new_df.columns.difference(str_cols)
+        combined_df = new_df[non_str_cols].add(existing_df[non_str_cols], fill_value=0)
+        
+        # Include string columns without modification
+        for col in str_cols:
+            if col in new_df:
+                combined_df[col] = new_df[col]
+            elif col in existing_df:
+                combined_df[col] = existing_df[col]
     else:
         combined_df = new_df
 
