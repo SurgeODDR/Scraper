@@ -87,26 +87,30 @@ def flexible_column_matching(df, keyword):
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
     try:
-        new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
-
-        # Convert any float NaN values to string 'NaN' and then standardize the index labels (remove counts)
-        new_df.index = new_df.index.fillna('NaN').astype(str).str.split(',').str[0]
+        # Read the new analysis, ensuring that any NaN values are filled with the string 'NaN'
+        new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0, dtype=str).fillna('NaN')
+        
+        # Standardize the index labels (remove counts)
+        new_df.index = new_df.index.str.split(',').str[0]
 
         celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
+        
         if celeb_db_analysis_blob_client.exists():
             existing_content = celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')
-            existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
-
-            # Convert any float NaN values to string 'NaN' and then standardize the index labels of the existing df
-            existing_df.index = existing_df.index.fillna('NaN').astype(str).str.split(',').str[0]
-
-            combined_df = new_df.add(existing_df, fill_value=0)
+            
+            # Read the existing content, ensuring that any NaN values are filled with the string 'NaN'
+            existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0, dtype=str).fillna('NaN')
+            
+            # Standardize the index labels of the existing df
+            existing_df.index = existing_df.index.str.split(',').str[0]
+            
+            # Convert values to numeric for addition. Fill NaN with 0 for addition.
+            combined_df = new_df.astype(float).add(existing_df.astype(float), fill_value=0)
         else:
             combined_df = new_df
 
         combined_csv_content = combined_df.to_csv()
         save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
-
     except Exception as e:
         app.logger.error(f"Error in combine_and_save_analysis: {str(e)}")
 
