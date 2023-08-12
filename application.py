@@ -84,6 +84,7 @@ def analyze_text(text):
         "temperature": 0.1,
         "max_tokens": 13000
     }
+
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
