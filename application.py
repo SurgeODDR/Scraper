@@ -101,25 +101,39 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
 @app.route('/process', methods=['GET'])
 def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-
-    if not blob_client.exists():
-        return jsonify({'message': 'No data available'}), 404
-
-    data = blob_client.download_blob().readall()
-    df = pd.read_json(io.BytesIO(data))
     
-    processed_ids = get_processed_tweet_ids(blob_service_client)
-    df = df[~df['id'].isin(processed_ids)]
-    
-    chunk_size = 5
-    chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
-    
-    for chunk_df in chunks:
-        chunk_text = chunk_df['text'].str.cat(sep='\n')
-        new_analysis = analyze_text(chunk_text)
-        combine_and_save_analysis(blob_service_client, new_analysis)
-        processed_ids.update(chunk_df['id'].tolist())
-        update_processed_tweet_ids(blob_service_client, processed_ids)
+    try:
+        # Fetching data from Azure Blob Storage
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
+        download_stream = blob_client.download_blob()
+        data = download_stream.readall()
+        df = pd.read_json(io.BytesIO(data))
+        
+        # Analyzing each tweet
+        analyses = []
+        for tweet_text in df['text']:
+            analysis = analyze_text(tweet_text)
+            analyses.append(analysis)
+        
+        # Convert analyses into DataFrame
+        new_df = pd.DataFrame(analyses)
+        
+        # Fetch existing data and combine with new data
+        db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
+        if db_analysis_blob_client.exists():
+            existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
+            existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
+            combined_df = combine_dataframes(new_df, existing_df)
+        else:
+            combined_df = new_df
+        
+        # Save combined data back to Azure Blob Storage
+        combined_csv_content = combined_df.to_csv()
+        blob_upload_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
+        blob_upload_client.upload_blob(combined_csv_content, overwrite=True)
 
-    return jsonify({'message': 'Data processed successfully'}), 200
+        return jsonify({'message': 'Data processed successfully'}), 200
+
+    except Exception as e:
+        app.logger.error(f"An error occurred: {e}")
+        return jsonify({'message': f"An error occurred: {str(e)}"}), 500
