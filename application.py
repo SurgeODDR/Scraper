@@ -83,14 +83,13 @@ def process_data():
     for _, row in df.iterrows():
         tweet_text = row['text']
         tweet_id = row['id']
-        created_time = row['created_at']  # Assuming the column name is 'created_at'
-        author_id = row['user']['id']  # Assuming user details are in a nested 'user' dictionary
+        created_time = row['created_at']
+        author_id = row['author_id']  # Corrected this line
         
         source_info = (f"Tweet ID: {tweet_id}\nCreated Time: {created_time}\n"
                        f"Tweet Text: {tweet_text}\nAuthor ID: {author_id}")
         
         analysis = analyze_text(tweet_text)
-        
         append_analysis_to_blob(blob_service_client, source_info, analysis)
         
     return jsonify({'message': 'Data processed successfully'}), 200
