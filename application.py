@@ -60,23 +60,22 @@ def update_processed_tweet_ids(blob_service_client, processed_ids):
     blob_client.upload_blob(ids_str, overwrite=True)
 
 def analyze_text(text):
+
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-            Generate a quantitative analysis in CSV format based on the provided text. Cover:
-            - Sentiments (Positive, Negative, Neutral)
-            - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
-            - Keywords related to celebrities, politicians, tax evasion, public scrutiny, reputation damage, and scandal.
+            Generate a quantitative analysis in CSV format based on the provided text. For each mentioned celebrity or politician, provide:
+            - Their name
+            - Sentiments (Positive, Negative, Neutral) associated with them
+            - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment) associated with them
             
             CSV Structure:
-            "Category, Total Mentions"
-            "Sentiments: Positive, [Total Positive Sentiment Mentions]"
-            "Sentiments: Negative, [Total Negative Sentiment Mentions]"
-            "Sentiments: Neutral, [Total Neutral Sentiment Mentions]"
-            "Emotions: Happiness, [Total Happiness Mentions]"
-            ...
-            "Keywords: Celebrities, [Total Celebrities Mentions]"
+            "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
+            "[Celebrity/Politician Name], Sentiments: Positive, [Total Positive Sentiment Mentions]"
+            "[Celebrity/Politician Name], Sentiments: Negative, [Total Negative Sentiment Mentions]"
+            "[Celebrity/Politician Name], Sentiments: Neutral, [Total Neutral Sentiment Mentions]"
+            "[Celebrity/Politician Name], Emotions: Happiness, [Total Happiness Mentions]"
             ...
             """
             },
@@ -85,7 +84,6 @@ def analyze_text(text):
         "temperature": 0.1,
         "max_tokens": 13000
     }
-
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
