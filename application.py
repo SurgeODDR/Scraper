@@ -92,6 +92,9 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
     try:
         new_df = pd.read_csv(io.StringIO(new_analysis))
         
+        # Log columns for debugging
+        app.logger.info(f"Columns in new analysis: {new_df.columns.tolist()}")
+        
         # Flexibly match column names
         name_col = flexible_column_matching(new_df, "Celebrity/Politician Name")
         sentiment_col = flexible_column_matching(new_df, "Sentiment/Emotion")
