@@ -118,10 +118,9 @@ def process_data():
         chunk_text = chunk_df['text'].str.cat(sep='\n')
         new_analysis = analyze_text(chunk_text)
         combine_and_save_analysis(blob_service_client, new_analysis)
+        
+        # Update processed IDs after processing each chunk
         processed_ids.update(chunk_df['id'].tolist())
+        save_to_blob(blob_service_client, "\n".join(map(str, processed_ids)), "processed_tweet_ids.txt")
 
-    save_to_blob(blob_service_client, "\n".join(map(str, processed_ids)), "processed_tweet_ids.txt")
     return jsonify({'message': 'Data processed successfully'}), 200
-
-if __name__ == '__main__':
-    app.run()
