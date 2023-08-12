@@ -65,30 +65,37 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-                Analyze the provided text to identify mentions of celebrities or politicians. For each distinct mention, quantify the associated sentiments and emotions. Ensure that each celebrity or politician is listed only once for each sentiment or emotion.
+                Your task is to analyze the provided text and identify any mentions of celebrities or politicians. Once identified, please provide a quantitative breakdown of sentiments and emotions associated with each celebrity or politician. It's crucial that you list each celebrity or politician only once per sentiment or emotion, and aggregate the mentions for that sentiment or emotion.
     
-                Please adhere to the following CSV format:
+                Output should be in this CSV format:
                 "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
-                For example:
+                For instance, if 'John Doe' was mentioned five times positively and twice with anger, it should look like:
                 "John Doe, Sentiments: Positive, 5"
                 "John Doe, Emotions: Anger, 2"
-                ...
+                and so on...
     
-                Focus on these sentiments: Positive, Negative, Neutral
-                And these emotions: happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment.
-                """
-            },
+                Focus on these sentiments: Positive, Negative, Neutral.
+                Emphasize these emotions: happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment.
+    
+                Ensure the output is concise and matches the above structure.
+            """},
             {"role": "user", "content": text}
         ],
         "temperature": 0.1,
         "max_tokens": 13000
     }
-    
+
     response_data = openai_request(data, openai.api_key, rate_limiter)
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
     new_df = pd.read_csv(io.StringIO(new_analysis))
+
+    # Validate that the necessary columns are present
+    required_columns = ['Celebrity/Politician Name', 'Sentiment/Emotion', 'Total Mentions']
+    if not set(required_columns).issubset(new_df.columns):
+        app.logger.error(f"Expected columns missing in response. Found columns: {new_df.columns}")
+        return
     
     celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
     if celeb_db_analysis_blob_client.exists():
