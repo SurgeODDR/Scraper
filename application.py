@@ -65,49 +65,45 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-            Generate a quantitative analysis in CSV format based on the provided text. For each mentioned celebrity or politician, provide:
-            - Their name
-            - Sentiments (Positive, Negative, Neutral) associated with them
-            - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment) associated with them
-            
-            CSV Structure:
-            "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
-            "[Celebrity/Politician Name], Sentiments: Positive, [Total Positive Sentiment Mentions]"
-            "[Celebrity/Politician Name], Sentiments: Negative, [Total Negative Sentiment Mentions]"
-            "[Celebrity/Politician Name], Sentiments: Neutral, [Total Neutral Sentiment Mentions]"
-            "[Celebrity/Politician Name], Emotions: Happiness, [Total Happiness Mentions]"
-            ...
-            """
+                Analyze the provided text to identify mentions of celebrities or politicians. For each distinct mention, quantify the associated sentiments and emotions. Ensure that each celebrity or politician is listed only once for each sentiment or emotion.
+    
+                Please adhere to the following CSV format:
+                "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
+                For example:
+                "John Doe, Sentiments: Positive, 5"
+                "John Doe, Emotions: Anger, 2"
+                ...
+    
+                Focus on these sentiments: Positive, Negative, Neutral
+                And these emotions: happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment.
+                """
             },
             {"role": "user", "content": text}
         ],
         "temperature": 0.1,
         "max_tokens": 13000
     }
-
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
-    new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
-
-    # Standardize the index labels (remove counts)
-    new_df.index = new_df.index.str.split(',').str[0]
-
+    new_df = pd.read_csv(io.StringIO(new_analysis))
+    
     celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
     if celeb_db_analysis_blob_client.exists():
         existing_content = celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')
-        existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
+        existing_df = pd.read_csv(io.StringIO(existing_content))
         
-        # Standardize the index labels of the existing df
-        existing_df.index = existing_df.index.str.split(',').str[0]
-
-        combined_df = new_df.add(existing_df, fill_value=0)
+        # Concatenate the new and existing dataframes
+        combined_df = pd.concat([new_df, existing_df])
+        
+        # Group by name and sentiment/emotion and then sum the total mentions
+        combined_df = combined_df.groupby(['Celebrity/Politician Name', 'Sentiment/Emotion']).sum().reset_index()
     else:
         combined_df = new_df
 
-    combined_csv_content = combined_df.to_csv()
+    combined_csv_content = combined_df.to_csv(index=False)
     save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
 
 @app.route('/process', methods=['GET'])
