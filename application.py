@@ -126,7 +126,7 @@ def process_data():
     
     # Process each chunk and update the aggregate analysis CSV file
     for chunk_df in chunks:
-        chunk_text = chunk_df['text'].str.cat(sep='\n')
+        chunk_text = chunk_df['text'].astype(str).str.cat(sep='\n')
         new_analysis = analyze_text(chunk_text)
         combine_and_save_analysis(blob_service_client, new_analysis)
 
