@@ -1,13 +1,13 @@
 import requests
-from flask import Flask, jsonify
 import pandas as pd
 import openai
+from flask import Flask, jsonify
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from azure.storage.blob import BlobServiceClient
+from ratelimiter import RateLimiter
 import io
 import logging
-from ratelimiter import RateLimiter
 
 app = Flask(__name__)
 app.logger.setLevel(logging.INFO)
@@ -17,128 +17,93 @@ key_vault_uri = "https://Keyvaultxscrapingoddr.vault.azure.net/"
 secret_client = SecretClient(vault_url=key_vault_uri, credential=credential)
 openai.api_key = secret_client.get_secret("openai-api-key").value
 
-# Rate limiter for the first OpenAI API key
+# Rate limiter for OpenAI API
 rate_limiter = RateLimiter(max_calls=3500, period=60)
 
-import time
-
-def openai_request(data, api_key, rate_limiter_obj, retries=3, delay=5):
-    headers = {"Authorization": f"Bearer {api_key}"}
-    
-    for _ in range(retries):
-        with rate_limiter_obj:
+def openai_request(data):
+    headers = {"Authorization": f"Bearer {openai.api_key}"}
+    for _ in range(3):  # 3 retries
+        with rate_limiter:
             response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
             if response.status_code == 429:  # Rate Limit Exceeded
-                app.logger.warning("Rate limit exceeded. Retrying in {} seconds...".format(delay))
-                time.sleep(delay)
+                app.logger.warning("Rate limit exceeded. Retrying...")
                 continue
             response.raise_for_status()
             return response.json()
-    app.logger.error("Failed to make a successful request after {} retries.".format(retries))
-    return {}  # Return an empty dictionary to indicate failure
-
+    app.logger.error("Failed to get a successful response from OpenAI.")
+    return {}
 
 def save_to_blob(blob_service_client, content, file_name):
-    path = f"/tmp/{file_name}"
-    with open(path, 'w') as file:
-        file.write(content)
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", file_name)
-    with open(path, 'rb') as data:
-        blob_client.upload_blob(data, overwrite=True)
+    blob_client.upload_blob(content, overwrite=True)
 
 def get_processed_tweet_ids(blob_service_client):
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "processed_tweet_ids.txt")
     if blob_client.exists():
-        download_stream = blob_client.download_blob()
-        processed_ids = set(map(int, download_stream.readall().decode('utf-8').splitlines()))
+        processed_ids = set(map(int, blob_client.download_blob().readall().decode('utf-8').splitlines()))
         return processed_ids
     return set()
 
-def update_processed_tweet_ids(blob_service_client, processed_ids):
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "processed_tweet_ids.txt")
-    ids_str = "\n".join(map(str, processed_ids))
-    blob_client.upload_blob(ids_str, overwrite=True)
-
 def analyze_text(text):
-
     data = {
         "model": "gpt-3.5-turbo-16k",
         "messages": [
-            {"role": "system", "content": """
-                Your task is to analyze the provided text and identify any mentions of celebrities or politicians. Once identified, please provide a quantitative breakdown of sentiments and emotions associated with each celebrity or politician. It's crucial that you list each celebrity or politician only once per sentiment or emotion, and aggregate the mentions for that sentiment or emotion.
-    
-                Output should be in this CSV format:
-                "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
-                For instance, if 'John Doe' was mentioned five times positively and twice with anger, it should look like:
-                "John Doe, Sentiments: Positive, 5"
-                "John Doe, Emotions: Anger, 2"
-                and so on...
-    
-                Focus on these sentiments: Positive, Negative, Neutral.
-                Emphasize these emotions: happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment.
-    
-                Ensure the output is concise and matches the above structure.
-            """},
+            {
+                "role": "system",
+                "content": """
+                    Extract mentions of celebrities or politicians from the text. For each identified figure, determine sentiments (Positive, Negative, Neutral) and emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage, distrust, despair, shock, relief, empowerment). Aggregate counts for each sentiment or emotion associated with the figure.
+                    
+                    Output format:
+                    "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
+                """
+            },
             {"role": "user", "content": text}
         ],
         "temperature": 0.1,
         "max_tokens": 13000
     }
 
-    response_data = openai_request(data, openai.api_key, rate_limiter)
-    return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
+    response_data = openai_request(data)
+    if 'choices' in response_data:
+        return response_data['choices'][0]['message']['content'].strip()
+    return "Error analyzing the text."
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
-    new_df = pd.read_csv(io.StringIO(new_analysis))
+    try:
+        new_df = pd.read_csv(io.StringIO(new_analysis))
+        celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
+        if celeb_db_analysis_blob_client.exists():
+            existing_df = pd.read_csv(io.StringIO(celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')))
+            combined_df = pd.concat([new_df, existing_df])
+            combined_df = combined_df.groupby(['Celebrity/Politician Name', 'Sentiment/Emotion']).sum().reset_index()
+        else:
+            combined_df = new_df
 
-    # Validate that the necessary columns are present
-    required_columns = ['Celebrity/Politician Name', 'Sentiment/Emotion', 'Total Mentions']
-    if not set(required_columns).issubset(new_df.columns):
-        app.logger.error(f"Expected columns missing in response. Found columns: {new_df.columns}")
-        return
-    
-    celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
-    if celeb_db_analysis_blob_client.exists():
-        existing_content = celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')
-        existing_df = pd.read_csv(io.StringIO(existing_content))
-        
-        # Concatenate the new and existing dataframes
-        combined_df = pd.concat([new_df, existing_df])
-        
-        # Group by name and sentiment/emotion and then sum the total mentions
-        combined_df = combined_df.groupby(['Celebrity/Politician Name', 'Sentiment/Emotion']).sum().reset_index()
-    else:
-        combined_df = new_df
-
-    combined_csv_content = combined_df.to_csv(index=False)
-    save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
+        combined_csv_content = combined_df.to_csv(index=False)
+        save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
+    except Exception as e:
+        app.logger.error(f"Error in combine_and_save_analysis: {str(e)}")
 
 @app.route('/process', methods=['GET'])
 def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
-    download_stream = blob_client.download_blob()
-    data = download_stream.readall()
-    df = pd.read_json(io.BytesIO(data))
-    
-    # Get the list of tweet IDs that have been processed already
-    processed_ids = get_processed_tweet_ids(blob_service_client)
+    df = pd.read_json(io.BytesIO(blob_client.download_blob().readall()))
 
-    # Filter out tweets that have been processed
+    processed_ids = get_processed_tweet_ids(blob_service_client)
     df = df[~df['id'].isin(processed_ids)]
     
-    # Splitting data into chunks
-    chunk_size = 5  # Adjust as needed
+    chunk_size = 5
     chunks = [df.iloc[i:i + chunk_size] for i in range(0, len(df), chunk_size)]
     
-    # Processing each chunk and updating db_analysis.csv
     for chunk_df in chunks:
         chunk_text = chunk_df['text'].str.cat(sep='\n')
         new_analysis = analyze_text(chunk_text)
         combine_and_save_analysis(blob_service_client, new_analysis)
-
-        # Update the list of processed tweets
         processed_ids.update(chunk_df['id'].tolist())
-        update_processed_tweet_ids(blob_service_client, processed_ids)
 
+    save_to_blob(blob_service_client, "\n".join(map(str, processed_ids)), "processed_tweet_ids.txt")
     return jsonify({'message': 'Data processed successfully'}), 200
+
+if __name__ == '__main__':
+    app.run()
