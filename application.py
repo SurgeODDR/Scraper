@@ -97,7 +97,12 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
 
     cleaned_combined_df = clean_and_format_data(combined_df)
     save_to_blob(blob_service_client, cleaned_combined_df.to_csv(), "c_db_analysis.csv")
-
+    
+def combine_dataframes(new_df, existing_df):
+    # This function combines the new and existing dataframes.
+    combined_df = new_df.add(existing_df, fill_value=0)
+    return combined_df
+    
 @app.route('/process', methods=['GET'])
 def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
@@ -108,29 +113,44 @@ def process_data():
         download_stream = blob_client.download_blob()
         data = download_stream.readall()
         df = pd.read_json(io.BytesIO(data))
-        
+
+        # Get already processed tweet IDs
+        processed_tweet_ids = get_processed_tweet_ids(blob_service_client)
+        new_processed_ids = []
+
         # Analyzing each tweet
-        analyses = []
-        for tweet_text in df['text']:
+        for index, row in df.iterrows():
+            tweet_id = row['id']
+            tweet_text = row['text']
+
+            # Skip if the tweet is already processed
+            if tweet_id in processed_tweet_ids:
+                continue
+
             analysis = analyze_text(tweet_text)
-            analyses.append(analysis)
-        
-        # Convert analyses into DataFrame
-        new_df = pd.DataFrame(analyses)
-        
-        # Fetch existing data and combine with new data
-        db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
-        if db_analysis_blob_client.exists():
-            existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
-            existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
-            combined_df = combine_dataframes(new_df, existing_df)
-        else:
-            combined_df = new_df
-        
-        # Save combined data back to Azure Blob Storage
-        combined_csv_content = combined_df.to_csv()
-        blob_upload_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
-        blob_upload_client.upload_blob(combined_csv_content, overwrite=True)
+
+            # Convert analysis into DataFrame
+            new_df = pd.DataFrame([analysis])
+
+            # Fetch existing data and combine with new analysis
+            db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
+            if db_analysis_blob_client.exists():
+                existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
+                existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
+                combined_df = combine_dataframes(new_df, existing_df)
+            else:
+                combined_df = new_df
+
+            # Save combined data back to Azure Blob Storage
+            combined_csv_content = combined_df.to_csv()
+            blob_upload_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
+            blob_upload_client.upload_blob(combined_csv_content, overwrite=True)
+
+            # Add the tweet ID to the new_processed_ids list
+            new_processed_ids.append(tweet_id)
+
+        # Update the list of processed tweet IDs in blob storage
+        update_processed_tweet_ids(blob_service_client, new_processed_ids + list(processed_tweet_ids))
 
         return jsonify({'message': 'Data processed successfully'}), 200
 
