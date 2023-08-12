@@ -84,7 +84,7 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
         new_df = pd.read_csv(io.StringIO(new_analysis), index_col=0)
 
         # Standardize the index labels (remove counts)
-        new_df.index = new_df.index.str.split(',').str[0]
+        new_df.index = new_df.index.astype(str).str.split(',').str[0]
 
         celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
         if celeb_db_analysis_blob_client.exists():
@@ -92,7 +92,7 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
             existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
 
             # Standardize the index labels of the existing df
-            existing_df.index = existing_df.index.str.split(',').str[0]
+            existing_df.index = existing_df.index.astype(str).str.split(',').str[0]
 
             combined_df = new_df.add(existing_df, fill_value=0)
         else:
