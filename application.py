@@ -64,21 +64,19 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-        Generate a quantitative analysis in CSV format based on the provided text. Cover:
-        - Sentiments regarding politicians and celebrities (Positive, Negative, Neutral)
-        - Key emotions regarding politicians and celebrities (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
-        - Keywords regarding politicians and celebrities related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
-        
-        CSV Structure:
-        "Name, Category, Total Mentions"
-        "[Politician/Celebrity Name], Sentiments: Positive, [Total Positive Sentiment Mentions for this individual]"
-        "[Politician/Celebrity Name], Sentiments: Negative, [Total Negative Sentiment Mentions for this individual]"
-        "[Politician/Celebrity Name], Sentiments: Neutral, [Total Neutral Sentiment Mentions for this individual]"
-        "[Politician/Celebrity Name], Emotions: Happiness, [Total Happiness Mentions for this individual]"
-        ...
-        "[Politician/Celebrity Name], Keywords: Inequality, [Total Inequality Mentions for this individual]"""
-        ...
-            },
+                    Generate a quantitative analysis in CSV format based on the provided text. Cover:
+                    - Sentiments regarding politicians and celebrities (Positive, Negative, Neutral)
+                    - Key emotions regarding politicians and celebrities (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
+                    - Keywords regarding politicians and celebrities related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
+                    
+                    CSV Structure:
+                    "Name, Category, Total Mentions"
+                    "[Politician/Celebrity Name], Sentiments: Positive, [Total Positive Sentiment Mentions for this individual]"
+                    "[Politician/Celebrity Name], Sentiments: Negative, [Total Negative Sentiment Mentions for this individual]"
+                    "[Politician/Celebrity Name], Sentiments: Neutral, [Total Neutral Sentiment Mentions for this individual]"
+                    "[Politician/Celebrity Name], Emotions: Happiness, [Total Happiness Mentions for this individual]"
+                    "[Politician/Celebrity Name], Keywords: Inequality, [Total Inequality Mentions for this individual]"
+            """ },
             {"role": "user", "content": text}
         ],
         "temperature": 0.1,
