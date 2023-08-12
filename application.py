@@ -51,23 +51,28 @@ def analyze_text(text):
             {
                 "role": "system",
                 "content": """
-                    It's crucial that the output is in a precise CSV format with the correct headers. Analyze the text to identify mentions of celebrities or politicians. Determine the associated sentiments (Positive, Negative, Neutral) and emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage, distrust, despair, shock, relief, empowerment) for each mentioned figure. Present the results in this specific CSV format, aggregating counts for each sentiment or emotion per figure.
+                    Generate a quantitative analysis in CSV format based on the provided text, focusing on mentions of politicians and celebrities. Cover:
+                    - Sentiments (Positive, Negative, Neutral) associated with these figures
+                    - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment) associated with these figures
+                    - Keywords related to inequality, unfairness, distrust in the politician/celebrity, unjust actions by them, disloyalty, and perceptions of corruption associated with them.
                     
-                    Desired CSV structure (including headers):
-                    "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
-                    For example:
-                    "John Doe, Sentiments: Positive, 5"
-                    "Jane Smith, Emotions: Anger, 3"
+                    CSV Structure:
+                    "Celebrity/Politician Name, Category, Total Mentions"
+                    "John Doe, Sentiments: Positive, [Total Positive Sentiment Mentions for John Doe]"
+                    "John Doe, Sentiments: Negative, [Total Negative Sentiment Mentions for John Doe]"
                     ...
-                    
-                    Ensure the headers are present in the output.
+                    "Jane Smith, Emotions: Happiness, [Total Happiness Mentions for Jane Smith]"
+                    ...
+                    "John Doe, Keywords: Inequality, [Total Inequality Mentions for John Doe]"
+                    ...
                 """
             },
             {"role": "user", "content": text}
         ],
-        "temperature": 0.1,
+        "temperature": 0.01,
         "max_tokens": 13000
     }
+
 
     response_data = openai_request(data)  # Using the function without unnecessary arguments
     if 'choices' in response_data:
@@ -79,9 +84,11 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
         new_df = pd.read_csv(io.StringIO(new_analysis))
         
         # Ensure necessary columns are present in the new dataframe
-        if 'Celebrity/Politician Name' not in new_df.columns:
-            app.logger.error("Expected column 'Celebrity/Politician Name' not found in new analysis.")
-            return
+        required_columns = ['Celebrity/Politician Name', 'Category', 'Total Mentions']
+        for col in required_columns:
+            if col not in new_df.columns:
+                app.logger.error(f"Expected column '{col}' not found in new analysis.")
+                return
 
         celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
         if celeb_db_analysis_blob_client.exists():
@@ -91,8 +98,8 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
             # Concatenate the new and existing dataframes
             combined_df = pd.concat([new_df, existing_df])
             
-            # Group by name and sentiment/emotion and then sum the total mentions
-            combined_df = combined_df.groupby(['Celebrity/Politician Name', 'Sentiment/Emotion']).sum().reset_index()
+            # Group by name and category and then sum the total mentions
+            combined_df = combined_df.groupby(['Celebrity/Politician Name', 'Category']).sum().reset_index()
         else:
             combined_df = new_df
 
