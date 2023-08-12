@@ -64,27 +64,28 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-        Generate a quantitative analysis in CSV format based on the provided text. Cover:
-        - Sentiments (Positive, Negative, Neutral)
-        - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
-        - Keywords related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
-        
-        CSV Structure:
-        "Category, Total Mentions"
-        "Sentiments: Positive, [Total Positive Sentiment Mentions]"
-        "Sentiments: Negative, [Total Negative Sentiment Mentions]"
-        "Sentiments: Neutral, [Total Neutral Sentiment Mentions]"
-        "Emotions: Happiness, [Total Happiness Mentions]"
-        ...
-        "Keywords: Inequality, [Total Inequality Mentions]"
-        ...
-        """
+            Generate a quantitative analysis in CSV format based on the provided text. Cover:
+            - Sentiments (Positive, Negative, Neutral)
+            - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
+            - Keywords related to celebrities, politicians, tax evasion, public scrutiny, reputation damage, and scandal.
+            
+            CSV Structure:
+            "Category, Total Mentions"
+            "Sentiments: Positive, [Total Positive Sentiment Mentions]"
+            "Sentiments: Negative, [Total Negative Sentiment Mentions]"
+            "Sentiments: Neutral, [Total Neutral Sentiment Mentions]"
+            "Emotions: Happiness, [Total Happiness Mentions]"
+            ...
+            "Keywords: Celebrities, [Total Celebrities Mentions]"
+            ...
+            """
             },
             {"role": "user", "content": text}
         ],
         "temperature": 0.1,
         "max_tokens": 13000
     }
+
     
     response_data = openai_request(data, openai.api_key, rate_limiter)
     return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
@@ -95,9 +96,9 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
     # Standardize the index labels (remove counts)
     new_df.index = new_df.index.str.split(',').str[0]
 
-    db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
-    if db_analysis_blob_client.exists():
-        existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
+    celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
+    if celeb_db_analysis_blob_client.exists():
+        existing_content = celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')
         existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
         
         # Standardize the index labels of the existing df
@@ -108,7 +109,7 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
         combined_df = new_df
 
     combined_csv_content = combined_df.to_csv()
-    save_to_blob(blob_service_client, combined_csv_content, "db_analysis.csv")
+    save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
 
 @app.route('/process', methods=['GET'])
 def process_data():
