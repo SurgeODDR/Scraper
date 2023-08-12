@@ -69,8 +69,10 @@ def analyze_text(text):
         "max_tokens": 13000
     }
 
-    response_data = openai_request(data, openai.api_key, rate_limiter)
-    return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
+    response_data = openai_request(data)  # Using the function without unnecessary arguments
+    if 'choices' in response_data:
+        return response_data['choices'][0]['message']['content'].strip()
+    return "Error analyzing the text."
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
     try:
