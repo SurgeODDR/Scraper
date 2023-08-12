@@ -51,12 +51,18 @@ def analyze_text(text):
             {
                 "role": "system",
                 "content": """
-                    Extract mentions of politicians and celebrities from the text. For each mentioned figure, categorize sentiments, emotions, and specific keywords related to them. Present the results in CSV format:
-                    
+                    Analyze the provided text and extract mentions of politicians and celebrities. For each figure mentioned, categorize the sentiments, emotions, and specific keywords associated with them. Ensure the output is strictly in CSV format with the following structure:
+
                     "Name, Sentiment/Emotion/Keyword, Count"
-                    For example: 
+
+                    For clarity:
+                    If John Doe is mentioned with positive sentiment 5 times, the output should include:
                     "John Doe, Positive Sentiment, 5"
+                    
+                    Similarly, if Jane Smith is associated with happiness 3 times:
                     "Jane Smith, Happiness, 3"
+
+                    The output should strictly adhere to the CSV format mentioned above without any additional text.
                 """
             },
             {"role": "user", "content": text}
