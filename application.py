@@ -28,7 +28,8 @@ def openai_request(data):
     with rate_limiter:
         response = requests.post(url, headers=headers, json=data)
         response.raise_for_status()
-        return response.json().get('choices', [{}])[0].get('message', {}).get('content', "").strip()
+        content = response.json().get('choices', [{}])[0].get('message', {}).get('content', "")
+        return str(content).strip()
 
 def save_to_blob(blob_service_client, content, file_name):
     blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", file_name)
@@ -114,14 +115,17 @@ def process_data():
         data = download_stream.readall()
         df = pd.read_json(io.BytesIO(data))
 
+        # Ensure the 'id' column in df is of integer type
+        df['id'] = df['id'].astype(int)
+
         # Get already processed tweet IDs
         processed_tweet_ids = get_processed_tweet_ids(blob_service_client)
         new_processed_ids = []
 
         # Analyzing each tweet
         for index, row in df.iterrows():
-            tweet_id = row['id']
-            tweet_text = row['text']
+            tweet_id = int(row['id'])  # Ensure tweet_id is of integer type
+            tweet_text = str(row['text'])  # Ensure tweet_text is of string type
 
             # Skip if the tweet is already processed
             if tweet_id in processed_tweet_ids:
