@@ -51,20 +51,12 @@ def analyze_text(text):
             {
                 "role": "system",
                 "content": """
-                    Generate a quantitative analysis in CSV format based on the provided text, focusing on mentions of politicians and celebrities. Cover:
-                    - Sentiments (Positive, Negative, Neutral) associated with these figures
-                    - Key emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment) associated with these figures
-                    - Keywords related to inequality, unfairness, distrust in the politician/celebrity, unjust actions by them, disloyalty, and perceptions of corruption associated with them.
+                    Extract mentions of politicians and celebrities from the text. For each mentioned figure, categorize sentiments, emotions, and specific keywords related to them. Present the results in CSV format:
                     
-                    CSV Structure:
-                    "Celebrity/Politician Name, Category, Total Mentions"
-                    "John Doe, Sentiments: Positive, [Total Positive Sentiment Mentions for John Doe]"
-                    "John Doe, Sentiments: Negative, [Total Negative Sentiment Mentions for John Doe]"
-                    ...
-                    "Jane Smith, Emotions: Happiness, [Total Happiness Mentions for Jane Smith]"
-                    ...
-                    "John Doe, Keywords: Inequality, [Total Inequality Mentions for John Doe]"
-                    ...
+                    "Name, Sentiment/Emotion/Keyword, Count"
+                    For example: 
+                    "John Doe, Positive Sentiment, 5"
+                    "Jane Smith, Happiness, 3"
                 """
             },
             {"role": "user", "content": text}
@@ -72,7 +64,6 @@ def analyze_text(text):
         "temperature": 0.3,
         "max_tokens": 13000
     }
-
 
     response_data = openai_request(data)  # Using the function without unnecessary arguments
     if 'choices' in response_data:
