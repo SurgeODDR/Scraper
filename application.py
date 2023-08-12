@@ -51,10 +51,16 @@ def analyze_text(text):
             {
                 "role": "system",
                 "content": """
-                    Extract mentions of celebrities or politicians from the text. For each identified figure, determine sentiments (Positive, Negative, Neutral) and emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage, distrust, despair, shock, relief, empowerment). Aggregate counts for each sentiment or emotion associated with the figure.
+                    It's crucial that the output is in a precise CSV format with the correct headers. Analyze the text to identify mentions of celebrities or politicians. Determine the associated sentiments (Positive, Negative, Neutral) and emotions (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage, distrust, despair, shock, relief, empowerment) for each mentioned figure. Present the results in this specific CSV format, aggregating counts for each sentiment or emotion per figure.
                     
-                    Output format:
+                    Desired CSV structure (including headers):
                     "Celebrity/Politician Name, Sentiment/Emotion, Total Mentions"
+                    For example:
+                    "John Doe, Sentiments: Positive, 5"
+                    "Jane Smith, Emotions: Anger, 3"
+                    ...
+                    
+                    Ensure the headers are present in the output.
                 """
             },
             {"role": "user", "content": text}
@@ -63,24 +69,34 @@ def analyze_text(text):
         "max_tokens": 13000
     }
 
-    response_data = openai_request(data)
-    if 'choices' in response_data:
-        return response_data['choices'][0]['message']['content'].strip()
-    return "Error analyzing the text."
+    response_data = openai_request(data, openai.api_key, rate_limiter)
+    return response_data['choices'][0]['message']['content'].strip() if 'choices' in response_data else "Error analyzing the text."
 
 def combine_and_save_analysis(blob_service_client, new_analysis):
     try:
         new_df = pd.read_csv(io.StringIO(new_analysis))
+        
+        # Ensure necessary columns are present in the new dataframe
+        if 'Celebrity/Politician Name' not in new_df.columns:
+            app.logger.error("Expected column 'Celebrity/Politician Name' not found in new analysis.")
+            return
+
         celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
         if celeb_db_analysis_blob_client.exists():
-            existing_df = pd.read_csv(io.StringIO(celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')))
+            existing_content = celeb_db_analysis_blob_client.download_blob().readall().decode('utf-8')
+            existing_df = pd.read_csv(io.StringIO(existing_content))
+            
+            # Concatenate the new and existing dataframes
             combined_df = pd.concat([new_df, existing_df])
+            
+            # Group by name and sentiment/emotion and then sum the total mentions
             combined_df = combined_df.groupby(['Celebrity/Politician Name', 'Sentiment/Emotion']).sum().reset_index()
         else:
             combined_df = new_df
 
         combined_csv_content = combined_df.to_csv(index=False)
         save_to_blob(blob_service_client, combined_csv_content, "celeb_db_analysis.csv")
+
     except Exception as e:
         app.logger.error(f"Error in combine_and_save_analysis: {str(e)}")
 
