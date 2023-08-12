@@ -79,16 +79,32 @@ def analyze_text(text):
         return response_data['choices'][0]['message']['content'].strip()
     return "Error analyzing the text."
 
+import re
+
+def flexible_column_matching(df, keyword):
+    """Find the column name that best matches the keyword."""
+    for col in df.columns:
+        if keyword.lower() in col.lower():
+            return col
+    return None
+
 def combine_and_save_analysis(blob_service_client, new_analysis):
     try:
         new_df = pd.read_csv(io.StringIO(new_analysis))
         
-        # Ensure necessary columns are present in the new dataframe
-        required_columns = ['Celebrity/Politician Name', 'Category', 'Total Mentions']
-        for col in required_columns:
-            if col not in new_df.columns:
-                app.logger.error(f"Expected column '{col}' not found in new analysis.")
-                return
+        # Flexibly match column names
+        name_col = flexible_column_matching(new_df, "Celebrity/Politician Name")
+        sentiment_col = flexible_column_matching(new_df, "Sentiment/Emotion")
+        mentions_col = flexible_column_matching(new_df, "Total Mentions")
+
+        if not name_col or not sentiment_col or not mentions_col:
+            app.logger.error("Essential columns not found in new analysis.")
+            return
+        
+        # Validate that 'Total Mentions' contains numerical values
+        if not pd.api.types.is_numeric_dtype(new_df[mentions_col]):
+            app.logger.error("Invalid data type in 'Total Mentions' column.")
+            return
 
         celeb_db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "celeb_db_analysis.csv")
         if celeb_db_analysis_blob_client.exists():
@@ -98,8 +114,8 @@ def combine_and_save_analysis(blob_service_client, new_analysis):
             # Concatenate the new and existing dataframes
             combined_df = pd.concat([new_df, existing_df])
             
-            # Group by name and category and then sum the total mentions
-            combined_df = combined_df.groupby(['Celebrity/Politician Name', 'Category']).sum().reset_index()
+            # Group by name and sentiment/emotion and then sum the total mentions
+            combined_df = combined_df.groupby([name_col, sentiment_col]).sum().reset_index()
         else:
             combined_df = new_df
 
