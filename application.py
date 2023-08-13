@@ -45,12 +45,12 @@ def update_processed_tweet_ids(blob_service_client, processed_ids):
     ids_str = "\n".join(map(str, processed_ids))
     save_to_blob(blob_service_client, ids_str, "processed_tweet_ids.txt")
 
+
 def combine_json_data(new_data, existing_data):
     for key, value in new_data.items():
         if key in existing_data:
             for sub_key, sub_value in value.items():
                 if sub_key in existing_data[key]:
-                    # Incrementing values for nested dictionaries
                     for inner_key, inner_value in sub_value.items():
                         if inner_key in existing_data[key][sub_key]:
                             existing_data[key][sub_key][inner_key] += inner_value
@@ -101,8 +101,6 @@ def analyze_text(text):
     }
     return openai_request(data)
 
-# ... [previous imports and functions]
-
 def process_tweets_chunk(chunk, blob_service_client, processed_tweet_ids):
     combined_data_chunk = {}
     new_processed_ids = []
@@ -126,24 +124,19 @@ def process_tweets_chunk(chunk, blob_service_client, processed_tweet_ids):
 @app.route('/process', methods=['GET'])
 def process_data():
     blob_service_client = BlobServiceClient(account_url="https://scrapingstoragex.blob.core.windows.net", credential=credential)
-    
+
     try:
-        # Fetching data from Azure Blob Storage
         blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "Tweets.json")
         download_stream = blob_client.download_blob()
         data = download_stream.readall()
         df = pd.read_json(io.BytesIO(data))
-        
-        # Get already processed tweet IDs
+
         processed_tweet_ids = get_processed_tweet_ids(blob_service_client)
-        
-        # Splitting dataframe into chunks of size 3
         chunks = [df.iloc[i:i+3] for i in range(0, df.shape[0], 3)]
-        
+
         for chunk in chunks:
             combined_data_chunk, new_processed_ids_chunk = process_tweets_chunk(chunk, blob_service_client, processed_tweet_ids)
-            
-            # Fetch existing data and combine with new analysis
+
             db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.json")
             if db_analysis_blob_client.exists():
                 existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
@@ -152,15 +145,16 @@ def process_data():
             else:
                 combined_data = combined_data_chunk
 
-            # Save combined data back to Azure Blob Storage
-            combined_json_content = json.dumps(combined_data)
+            # Filter zero-values and pretty print the JSON
+            combined_data_cleaned = {entity: {category: {k: v for k, v in details.items() if v != 0} for category, details in data.items()} for entity, data in combined_data.items()}
+            combined_json_content = json.dumps(combined_data_cleaned, indent=4)
+
             blob_upload_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.json")
             blob_upload_client.upload_blob(combined_json_content, overwrite=True)
             
-            # Update the list of processed tweet IDs in blob storage
             update_processed_tweet_ids(blob_service_client, new_processed_ids_chunk + list(processed_tweet_ids))
             processed_tweet_ids.update(new_processed_ids_chunk)
-        
+
         return jsonify({'message': 'Data processed successfully'}), 200
 
     except Exception as e:
