@@ -145,8 +145,13 @@ def process_data():
             else:
                 combined_data = combined_data_chunk
 
+            app.logger.info(f"Combined data before cleaning: {combined_data}")
+
             # Filter zero-values and pretty print the JSON
             combined_data_cleaned = {entity: {category: {k: v for k, v in details.items() if v != 0} for category, details in data.items()} for entity, data in combined_data.items()}
+            
+            app.logger.info(f"Cleaned data: {combined_data_cleaned}")
+
             combined_json_content = json.dumps(combined_data_cleaned, indent=4)
 
             blob_upload_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.json")
