@@ -44,6 +44,18 @@ def update_processed_tweet_ids(blob_service_client, processed_ids):
     ids_str = "\n".join(map(str, processed_ids))
     save_to_blob(blob_service_client, ids_str, "processed_tweet_ids.txt")
 
+def combine_json_data(new_data, existing_data):
+    for key, value in new_data.items():
+        if key in existing_data:
+            for sub_key, sub_value in value.items():
+                if sub_key in existing_data[key]:
+                    existing_data[key][sub_key] += sub_value
+                else:
+                    existing_data[key][sub_key] = sub_value
+        else:
+            existing_data[key] = value
+    return existing_data
+
 def analyze_text(text):
     # Define request payload
     data = {
