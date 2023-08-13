@@ -30,37 +30,57 @@ def openai_request(data):
         response.raise_for_status()
         return response.json().get('choices', [{}])[0].get('message', {}).get('content', "").strip()
 
+import logging
+
 def save_to_blob(blob_service_client, content, file_name):
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", file_name)
-    blob_client.upload_blob(content, overwrite=True)
+    try:
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", file_name)
+        blob_client.upload_blob(content, overwrite=True)
+        logging.info(f"Successfully saved content to blob with filename: {file_name}")
+    except Exception as e:
+        logging.error(f"Error saving content to blob: {e}")
+        raise
 
 def get_processed_tweet_ids(blob_service_client):
-    blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "processed_tweet_ids.txt")
-    if blob_client.exists():
-        ids = blob_client.download_blob().readall().decode('utf-8').splitlines()
-        return set(map(int, ids))
-    return set()
+    try:
+        blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "processed_tweet_ids.txt")
+        if blob_client.exists():
+            ids = blob_client.download_blob().readall().decode('utf-8').splitlines()
+            return set(map(int, ids))
+        return set()
+    except Exception as e:
+        logging.error(f"Error fetching processed tweet IDs: {e}")
+        raise
 
 def update_processed_tweet_ids(blob_service_client, processed_ids):
-    ids_str = "\n".join(map(str, processed_ids))
-    save_to_blob(blob_service_client, ids_str, "processed_tweet_ids.txt")
-
+    try:
+        ids_str = "\n".join(map(str, processed_ids))
+        save_to_blob(blob_service_client, ids_str, "processed_tweet_ids.txt")
+        logging.info("Successfully updated processed tweet IDs.")
+    except Exception as e:
+        logging.error(f"Error updating processed tweet IDs: {e}")
+        raise
 
 def combine_json_data(new_data, existing_data):
-    for key, value in new_data.items():
-        if key in existing_data:
-            for sub_key, sub_value in value.items():
-                if sub_key in existing_data[key]:
-                    for inner_key, inner_value in sub_value.items():
-                        if inner_key in existing_data[key][sub_key]:
-                            existing_data[key][sub_key][inner_key] += inner_value
-                        else:
-                            existing_data[key][sub_key][inner_key] = inner_value
-                else:
-                    existing_data[key][sub_key] = sub_value
-        else:
-            existing_data[key] = value
-    return existing_data
+    try:
+        for key, value in new_data.items():
+            if key in existing_data:
+                for sub_key, sub_value in value.items():
+                    if sub_key in existing_data[key]:
+                        for inner_key, inner_value in sub_value.items():
+                            if inner_key in existing_data[key][sub_key]:
+                                existing_data[key][sub_key][inner_key] += inner_value
+                            else:
+                                existing_data[key][sub_key][inner_key] = inner_value
+                    else:
+                        existing_data[key][sub_key] = sub_value
+            else:
+                existing_data[key] = value
+        logging.info("Successfully combined JSON data.")
+        return existing_data
+    except Exception as e:
+        logging.error(f"Error combining JSON data: {e}")
+        raise
 
 
 def analyze_text(text):
@@ -101,9 +121,15 @@ def analyze_text(text):
     }
     return openai_request(data)
 
+import logging
+
 def process_tweets_chunk(chunk, blob_service_client, processed_tweet_ids):
     combined_data_chunk = {}
     new_processed_ids = []
+    
+    # Initialize logger
+    logger = logging.getLogger('process_tweets_chunk')
+    logger.setLevel(logging.INFO)
     
     for _, row in chunk.iterrows():
         tweet_id = row['id']
@@ -111,13 +137,19 @@ def process_tweets_chunk(chunk, blob_service_client, processed_tweet_ids):
 
         # Skip if the tweet is already processed
         if tweet_id in processed_tweet_ids:
+            logger.info(f"Tweet with ID {tweet_id} already processed. Skipping.")
             continue
 
-        analysis = json.loads(analyze_text(tweet_text))
-        combined_data_chunk = combine_json_data(analysis, combined_data_chunk)
-        
-        # Add the tweet ID to the new_processed_ids list
-        new_processed_ids.append(tweet_id)
+        try:
+            analysis = json.loads(analyze_text(tweet_text))
+            combined_data_chunk = combine_json_data(analysis, combined_data_chunk)
+            
+            # Add the tweet ID to the new_processed_ids list
+            new_processed_ids.append(tweet_id)
+            logger.info(f"Tweet with ID {tweet_id} processed successfully.")
+        except Exception as e:
+            logger.error(f"An error occurred while processing tweet with ID {tweet_id}: {e}")
+            continue
 
     return combined_data_chunk, new_processed_ids
 
