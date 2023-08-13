@@ -50,12 +50,18 @@ def combine_json_data(new_data, existing_data):
         if key in existing_data:
             for sub_key, sub_value in value.items():
                 if sub_key in existing_data[key]:
-                    existing_data[key][sub_key] += sub_value
+                    # Incrementing values for nested dictionaries
+                    for inner_key, inner_value in sub_value.items():
+                        if inner_key in existing_data[key][sub_key]:
+                            existing_data[key][sub_key][inner_key] += inner_value
+                        else:
+                            existing_data[key][sub_key][inner_key] = inner_value
                 else:
                     existing_data[key][sub_key] = sub_value
         else:
             existing_data[key] = value
     return existing_data
+
 
 def analyze_text(text):
     # Define request payload
