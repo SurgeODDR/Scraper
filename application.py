@@ -50,43 +50,37 @@ def analyze_text(text):
         "model": "gpt-3.5-turbo-16k",
         "messages": [
             {"role": "system", "content": """
-                    Generate a quantitative analysis in CSV format based on the provided text. Cover:
+                    Generate a quantitative analysis in JSON format based on the provided text. Cover:
                     - Sentiments regarding politicians and celebrities (Positive, Negative, Neutral)
                     - Key emotions regarding politicians and celebrities (happiness, sadness, anger, fear, surprise, disgust, jealousy, outrage/indignation, distrust/skepticism, despair/hopelessness, shock/astonishment, relief, and empowerment)
                     - Keywords regarding politicians and celebrities related to inequality, unfairness, distrust in government, unjust actions, disloyalty, and perceptions of corruption.
                     
-                    CSV Structure:
-                    "Name, Category, Total Mentions"
-                    "[Politician/Celebrity Name], Sentiments: Positive, [Total Positive Sentiment Mentions for this individual]"
-                    "[Politician/Celebrity Name], Sentiments: Negative, [Total Negative Sentiment Mentions for this individual]"
-                    "[Politician/Celebrity Name], Sentiments: Neutral, [Total Neutral Sentiment Mentions for this individual]"
-                    "[Politician/Celebrity Name], Emotions: Happiness, [Total Happiness Mentions for this individual]"
-                    "[Politician/Celebrity Name], Keywords: Inequality, [Total Inequality Mentions for this individual]"
-            """ },
+                    JSON Structure:
+                    {
+                        "[Politician/Celebrity Name]": {
+                            "Sentiments": {
+                                "Positive": [Total Positive Sentiment Mentions for this individual],
+                                "Negative": [Total Negative Sentiment Mentions for this individual],
+                                "Neutral": [Total Neutral Sentiment Mentions for this individual]
+                            },
+                            "Emotions": {
+                                "Happiness": [Total Happiness Mentions for this individual],
+                                ... [Other emotions]
+                            },
+                            "Keywords": {
+                                "Inequality": [Total Inequality Mentions for this individual],
+                                ... [Other keywords]
+                            }
+                        },
+                        ... [Other Politician/Celebrity Names]
+                    }
+            """},
             {"role": "user", "content": text}
         ],
         "temperature": 0.1,
         "max_tokens": 13000
     }
     return openai_request(data)
-
-def clean_and_format_data(df):
-    df.index = df.index.str.lower()
-    df_grouped = df.groupby(df.index).sum()
-    df_cleaned = df_grouped.reset_index()
-
-    # Handle unexpected column numbers
-    if len(df_cleaned.columns) == 2:
-        df_cleaned.columns = ['Name or Category', 'Total Mentions']
-    else:
-        app.logger.warning("Unexpected number of columns in df_cleaned. Skipping column renaming.")
-
-    return df_cleaned
-
-def combine_dataframes(new_df, existing_df):
-    # This function combines the new and existing dataframes.
-    combined_df = new_df.add(existing_df, fill_value=0)
-    return combined_df
 
 @app.route('/process', methods=['GET'])
 def process_data():
@@ -112,26 +106,21 @@ def process_data():
             if tweet_id in processed_tweet_ids:
                 continue
 
-            analysis = analyze_text(tweet_text)
-
-            # Convert analysis into DataFrame
-            new_df = pd.read_csv(io.StringIO(analysis), index_col=0)
-            new_df.index = new_df.index.str.split(',').str[0]
+            analysis = json.loads(analyze_text(tweet_text))
 
             # Fetch existing data and combine with new analysis
-            db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
+            db_analysis_blob_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.json")
             if db_analysis_blob_client.exists():
                 existing_content = db_analysis_blob_client.download_blob().readall().decode('utf-8')
-                existing_df = pd.read_csv(io.StringIO(existing_content), index_col=0)
-                existing_df.index = existing_df.index.str.split(',').str[0]
-                combined_df = combine_dataframes(new_df, existing_df)
+                existing_data = json.loads(existing_content)
+                combined_data = combine_json_data(analysis, existing_data)
             else:
-                combined_df = new_df
+                combined_data = analysis
 
             # Save combined data back to Azure Blob Storage
-            combined_csv_content = combined_df.to_csv()
-            blob_upload_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.csv")
-            blob_upload_client.upload_blob(combined_csv_content, overwrite=True)
+            combined_json_content = json.dumps(combined_data)
+            blob_upload_client = blob_service_client.get_blob_client("scrapingstoragecontainer", "db_analysis.json")
+            blob_upload_client.upload_blob(combined_json_content, overwrite=True)
 
             # Add the tweet ID to the new_processed_ids list
             new_processed_ids.append(tweet_id)
